@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Upload Results | JiraMaster{% endblock %}
+
+{% block content %}
+<h2 class="mb-1">Upload Results</h2>
+{% set success_count = results | selectattr('success') | list | length %}
+{% set fail_count = results | rejectattr('success') | list | length %}
+<p class="text-muted mb-4">
+  {{ success_count }} created successfully{% if fail_count %}, {{ fail_count }} failed{% endif %}.
+</p>
+
+{% if success_count > 0 %}
+<div class="alert alert-success">
+  {{ success_count }} issue(s) created in Jira.
+</div>
+{% endif %}
+{% if fail_count > 0 %}
+<div class="alert alert-danger">
+  {{ fail_count }} issue(s) failed to create. See details below.
+</div>
+{% endif %}
+
+<div class="table-responsive">
+  <table class="table table-bordered table-hover">
+    <thead class="table-light">
+      <tr>
+        <th>Issue</th>
+        <th style="width:80px">Type</th>
+        <th style="width:90px">Status</th>
+        <th style="width:130px">Jira Key</th>
+        <th>Error</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in results %}
+      <tr class="{{ 'table-success' if r.success else 'table-danger' }}">
+        <td>{{ r.title }}</td>
+        <td>
+          <span class="badge {{ 'bg-primary' if r.issue_type == 'Epic' else 'bg-secondary' }}">
+            {{ r.issue_type }}
+          </span>
+        </td>
+        <td>
+          {% if r.success %}
+            <span class="badge bg-success">✓ Created</span>
+          {% else %}
+            <span class="badge bg-danger">✗ Failed</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if r.jira_key and r.jira_url %}
+            <a href="{{ r.jira_url }}" target="_blank" class="fw-semibold">{{ r.jira_key }}</a>
+          {% else %}
+            —
+          {% endif %}
+        </td>
+        <td class="small text-danger" style="white-space: pre-wrap; word-break: break-word;">{{ r.error_message or '' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="d-flex gap-2 mt-3">
+  <a href="{{ url_for('import_view.index') }}" class="btn btn-outline-secondary">Start New Import</a>
+  <a href="{{ url_for('prompt.index') }}" class="btn btn-outline-primary">Back to Step 1</a>
+</div>
+{% endblock %}

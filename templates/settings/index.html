@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% block title %}Settings | JiraMaster{% endblock %}
+
+{% block content %}
+<h2 class="mb-1">Settings</h2>
+<p class="text-muted mb-4">Configure your Jira Cloud connection. Credentials are stored locally in <code>config.json</code>.</p>
+
+<div class="row">
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-header fw-semibold">Jira Configuration</div>
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('settings.save') }}" id="settingsForm">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="mb-3">
+            <label for="base_url" class="form-label fw-semibold">Jira Base URL</label>
+            <input type="url" name="base_url" id="base_url" class="form-control"
+                   value="{{ cfg.base_url }}" placeholder="https://yourcompany.atlassian.net" required>
+            <div class="form-text">Your Atlassian Cloud URL (without trailing slash).</div>
+          </div>
+
+          <div class="mb-3">
+            <label for="username" class="form-label fw-semibold">Email / Username</label>
+            <input type="email" name="username" id="username" class="form-control"
+                   value="{{ cfg.username }}" placeholder="you@company.com" required>
+          </div>
+
+          <div class="mb-3">
+            <label for="api_token" class="form-label fw-semibold">API Token</label>
+            <input type="password" name="api_token" id="api_token" class="form-control"
+                   value="{{ cfg.api_token }}" placeholder="Your Atlassian API token" required>
+            <div class="form-text">
+              Generate a token at
+              <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank">
+                id.atlassian.com
+              </a>.
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label for="project_key" class="form-label fw-semibold">Project Key</label>
+            <input type="text" name="project_key" id="project_key" class="form-control"
+                   value="{{ cfg.project_key }}" placeholder="PROJ" required
+                   style="width:200px" maxlength="20">
+            <div class="form-text">The short key for your Jira project (e.g. PROJ, DEV, MYTEAM).</div>
+          </div>
+
+          <div class="mb-3">
+            <label for="ac_field_id" class="form-label fw-semibold">Acceptance Criteria Field ID</label>
+            <input type="text" name="ac_field_id" id="ac_field_id" class="form-control"
+                   value="{{ cfg.ac_field_id }}" placeholder="customfield_11401"
+                   style="width:260px" maxlength="50">
+            <div class="form-text">
+              The Jira custom field ID for Acceptance Criteria (e.g. <code>customfield_11401</code>).
+              Use <strong>Detect Fields</strong> to find it automatically, or enter it manually.
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label for="proxy_url" class="form-label fw-semibold">
+              HTTP Proxy URL <span class="text-muted fw-normal">(optional)</span>
+            </label>
+            <input type="url" name="proxy_url" id="proxy_url" class="form-control"
+                   value="{{ cfg.proxy_url }}" placeholder="http://proxy.company.com:8080">
+            <div class="form-text">
+              Leave blank for direct connections. Set this if your network requires a proxy to reach Jira.
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label fw-semibold">
+              Labels <span class="text-muted fw-normal">(optional)</span>
+            </label>
+            {% if label_cache %}
+              <div class="border rounded p-2" style="max-height:160px;overflow-y:auto;">
+                {% for lbl in label_cache %}
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="labels" value="{{ lbl }}"
+                           id="lbl_{{ loop.index }}"
+                           {% if lbl in cfg.labels %}checked{% endif %}>
+                    <label class="form-check-label small" for="lbl_{{ loop.index }}">{{ lbl }}</label>
+                  </div>
+                {% endfor %}
+              </div>
+              <div class="form-text">Checked labels are applied to every epic and story created by this tool.</div>
+            {% else %}
+              <div class="form-text text-warning">
+                No label cache — click <strong>Refresh Labels</strong> to load available labels from Jira.
+              </div>
+            {% endif %}
+          </div>
+
+          <div class="d-flex gap-2 flex-wrap">
+            <button type="submit" class="btn btn-primary">Save Settings</button>
+            <button type="submit" form="testForm" class="btn btn-outline-secondary">
+              Test Connection
+            </button>
+            <button type="submit" form="detectForm" class="btn btn-outline-info">
+              Detect Fields
+            </button>
+            <button type="submit" form="refreshAssigneesForm" class="btn btn-outline-secondary">
+              Refresh Assignees
+            </button>
+            <button type="submit" form="refreshLabelsForm" class="btn btn-outline-secondary">
+              Refresh Labels
+            </button>
+          </div>
+        </form>
+
+        <!-- Separate form for test (same fields, different action) -->
+        <form method="POST" action="{{ url_for('settings.test_connection') }}" id="testForm" class="d-none">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="base_url" id="test_base_url">
+          <input type="hidden" name="username" id="test_username">
+          <input type="hidden" name="api_token" id="test_api_token">
+          <input type="hidden" name="project_key" id="test_project_key">
+          <input type="hidden" name="proxy_url" id="test_proxy_url">
+        </form>
+
+        <!-- Separate form for field detection -->
+        <form method="POST" action="{{ url_for('settings.detect_fields') }}" id="detectForm" class="d-none">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        </form>
+
+        <!-- Separate form for assignee refresh -->
+        <form method="POST" action="{{ url_for('settings.refresh_assignees') }}" id="refreshAssigneesForm" class="d-none">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        </form>
+
+        <!-- Separate form for label refresh -->
+        <form method="POST" action="{{ url_for('settings.refresh_labels') }}" id="refreshLabelsForm" class="d-none">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        </form>
+      </div>
+    </div>
+
+    <div class="card mt-4">
+      <div class="card-header fw-semibold">Status</div>
+      <div class="card-body">
+        {% if cfg.is_configured() %}
+          <div class="d-flex align-items-center gap-2 text-success">
+            <span class="fs-4">✓</span>
+            <div>
+              <div class="fw-semibold">Configured</div>
+              <div class="small text-muted">{{ cfg.username }} → {{ cfg.base_url }} ({{ cfg.project_key }})</div>
+            </div>
+          </div>
+          {% if cfg.proxy_url %}
+          <div class="mt-2 small text-muted">Proxy: {{ cfg.proxy_url }}</div>
+          {% endif %}
+          <div class="mt-3 d-flex align-items-center gap-2 {% if cfg.ac_field_id %}text-success{% else %}text-warning{% endif %}">
+            <span class="fs-5">{% if cfg.ac_field_id %}✓{% else %}⚠{% endif %}</span>
+            <div>
+              <div class="fw-semibold small">Acceptance Criteria Field</div>
+              {% if cfg.ac_field_id %}
+                <div class="small text-muted">{{ cfg.ac_field_id }}</div>
+              {% else %}
+                <div class="small text-muted">Not detected — click "Detect Fields" to find it automatically.</div>
+              {% endif %}
+            </div>
+          </div>
+          <div class="mt-3 d-flex align-items-center gap-2 {% if assignees %}text-success{% else %}text-muted{% endif %}">
+            <span class="fs-5">{% if assignees %}✓{% else %}–{% endif %}</span>
+            <div>
+              <div class="fw-semibold small">Assignee Cache</div>
+              {% if assignees %}
+                <div class="small text-muted">{{ assignees|length }} users cached — click "Refresh Assignees" to update</div>
+              {% else %}
+                <div class="small text-muted">No cache — click "Refresh Assignees" to fetch from Jira</div>
+              {% endif %}
+            </div>
+          </div>
+          <div class="mt-3 d-flex align-items-center gap-2 {% if label_cache %}text-success{% else %}text-muted{% endif %}">
+            <span class="fs-5">{% if label_cache %}✓{% else %}–{% endif %}</span>
+            <div>
+              <div class="fw-semibold small">Label Cache</div>
+              {% if label_cache %}
+                <div class="small text-muted">{{ label_cache|length }} labels cached — click "Refresh Labels" to update</div>
+              {% else %}
+                <div class="small text-muted">No cache — click "Refresh Labels" to fetch from Jira</div>
+              {% endif %}
+              {% if cfg.labels %}
+                <div class="small text-muted mt-1">Selected: {{ cfg.labels | join(', ') }}</div>
+              {% endif %}
+            </div>
+          </div>
+        {% else %}
+          <div class="d-flex align-items-center gap-2 text-warning">
+            <span class="fs-4">⚠</span>
+            <div>
+              <div class="fw-semibold">Not configured</div>
+              <div class="small text-muted">Fill in the form above to connect to Jira.</div>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header fw-semibold">How to get an API Token</div>
+      <div class="card-body small">
+        <ol>
+          <li>Go to <strong>id.atlassian.com → Security → API tokens</strong></li>
+          <li>Click <strong>Create API token</strong></li>
+          <li>Give it a name (e.g. "JiraMaster")</li>
+          <li>Copy the token and paste it above</li>
+        </ol>
+        <p class="text-muted mb-0">
+          The token is stored in <code>config.json</code> in the project directory.
+          This file is gitignored and never committed.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Mirror main form values into hidden test form before submission
+document.getElementById('testForm').addEventListener('submit', function() {
+  document.getElementById('test_base_url').value = document.getElementById('base_url').value;
+  document.getElementById('test_username').value = document.getElementById('username').value;
+  document.getElementById('test_api_token').value = document.getElementById('api_token').value;
+  document.getElementById('test_project_key').value = document.getElementById('project_key').value;
+  document.getElementById('test_proxy_url').value = document.getElementById('proxy_url').value;
+});
+</script>
+{% endblock %}

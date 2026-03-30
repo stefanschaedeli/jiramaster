@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run lint)",
+      "Bash(npm run test)",
+      "Bash(npm run test:*)",
+      "Bash(npm run typecheck)",
+      "Bash(git status)",
+      "Bash(git diff)"
+    ],
+    "deny": [
+      "Read(.env*)",
+      "Read(~/.ssh/*)",
+      "Bash(rm -rf:*)",
+      "Bash(sudo:*)"
+    ]
+  }
+}

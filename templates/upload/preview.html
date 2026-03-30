@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Step 4 – Preview Upload | JiraMaster{% endblock %}
+
+{% block content %}
+<h2 class="mb-1">Step 4: Upload Preview</h2>
+<p class="text-muted mb-4">Review what will be created in Jira before uploading.</p>
+
+{% if not cfg.is_configured() %}
+<div class="alert alert-warning">
+  Jira is not configured. <a href="{{ url_for('settings.index') }}">Go to Settings</a> to set up your credentials.
+</div>
+{% endif %}
+
+<div class="row g-3 mb-4">
+  <div class="col-sm-3">
+    <div class="card text-center">
+      <div class="card-body py-3">
+        <div class="display-6 fw-bold text-primary">{{ epic_count }}</div>
+        <div class="text-muted small">Epics</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-3">
+    <div class="card text-center">
+      <div class="card-body py-3">
+        <div class="display-6 fw-bold text-secondary">{{ story_count }}</div>
+        <div class="text-muted small">Stories</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-3">
+    <div class="card text-center">
+      <div class="card-body py-3">
+        <div class="display-6 fw-bold text-success">{{ epic_count + story_count }}</div>
+        <div class="text-muted small">Total Issues</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-3">
+    <div class="card text-center">
+      <div class="card-body py-3">
+        <div class="display-6 fw-bold text-info">{{ cfg.project_key or '—' }}</div>
+        <div class="text-muted small">Project</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% for epic in epics %}
+{% if epic.include %}
+<div class="card mb-3">
+  <div class="card-header d-flex align-items-center gap-2">
+    <span class="badge bg-primary">Epic</span>
+    <strong>{{ epic.title }}</strong>
+    <span class="badge bg-{{ 'danger' if epic.priority == 'Critical' else 'warning text-dark' if epic.priority == 'High' else 'info text-dark' if epic.priority == 'Medium' else 'secondary' }} ms-auto">
+      {{ epic.priority }}
+    </span>
+    {% if epic.due_date %}
+      <span class="text-muted small">Due: {{ epic.due_date }}</span>
+    {% endif %}
+    {% if epic.initiative_id %}
+      <span class="badge bg-light text-dark border">Initiative: {{ epic.initiative_id }}</span>
+    {% endif %}
+  </div>
+  {% set included_stories = epic.stories | selectattr('include') | list %}
+  {% if included_stories %}
+  <ul class="list-group list-group-flush">
+    {% for story in included_stories %}
+    <li class="list-group-item d-flex align-items-center gap-2 ps-4">
+      <span class="badge bg-secondary">Story</span>
+      {{ story.title }}
+      <span class="badge bg-light text-dark border ms-1">{{ story.priority }}</span>
+      {% if story.due_date %}
+        <span class="text-muted small">Due: {{ story.due_date }}</span>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</div>
+{% endif %}
+{% endfor %}
+
+{% set blank_ac_count = namespace(value=0) %}
+{% for epic in epics %}
+  {% if epic.include %}
+    {% if not epic.acceptance_criteria or not epic.acceptance_criteria.strip() %}
+      {% set blank_ac_count.value = blank_ac_count.value + 1 %}
+    {% endif %}
+    {% for story in epic.stories %}
+      {% if story.include %}
+        {% if not story.acceptance_criteria or not story.acceptance_criteria.strip() %}
+          {% set blank_ac_count.value = blank_ac_count.value + 1 %}
+        {% endif %}
+      {% endif %}
+    {% endfor %}
+  {% endif %}
+{% endfor %}
+{% if blank_ac_count.value > 0 %}
+<div class="alert alert-warning d-flex align-items-center gap-2">
+  <span class="fs-5">⚠</span>
+  <div>
+    <strong>{{ blank_ac_count.value }} issue{{ 's' if blank_ac_count.value != 1 else '' }} have no Acceptance Criteria.</strong>
+    These may fail if Acceptance Criteria is a required field in your Jira.
+    <a href="{{ url_for('edit.index') }}" class="alert-link">Go back to fill them in.</a>
+  </div>
+</div>
+{% endif %}
+
+<div class="d-flex gap-2 mt-4">
+  <a href="{{ url_for('edit.index') }}" class="btn btn-outline-secondary">← Back to Edit</a>
+  {% if cfg.is_configured() and epic_count > 0 %}
+  <form method="POST" action="{{ url_for('upload.run') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-success"
+            onclick="this.disabled=true; this.textContent='Uploading…'; this.form.submit()">
+      Upload to Jira ({{ cfg.project_key }}) →
+    </button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

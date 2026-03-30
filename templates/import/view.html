@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Step 2 – Review Import | JiraMaster{% endblock %}
+
+{% block content %}
+<h2 class="mb-1">Review Imported Epics</h2>
+<p class="text-muted mb-4">
+  {{ epics|length }} epic(s) found. Check/uncheck items to include. Set an Initiative ID if needed.
+</p>
+
+<form method="POST" action="{{ url_for('import_view.confirm') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {% for i, epic in enumerate(epics) %}
+  <div class="card mb-3 epic-card">
+    <div class="card-header d-flex align-items-center gap-3">
+      <input class="form-check-input epic-toggle mt-0" type="checkbox"
+             name="epic_{{ i }}" id="epic_{{ i }}"
+             {% if epic.include %}checked{% endif %}
+             data-epic-index="{{ i }}"
+             style="width:1.2em;height:1.2em;">
+      <label for="epic_{{ i }}" class="fw-semibold mb-0 flex-grow-1">
+        {{ epic.title }}
+        <span class="badge bg-{{ 'danger' if epic.priority == 'Critical' else 'warning text-dark' if epic.priority == 'High' else 'info text-dark' if epic.priority == 'Medium' else 'secondary' }} ms-2">
+          {{ epic.priority }}
+        </span>
+      </label>
+      <div class="d-flex align-items-center gap-2">
+        <label class="small text-muted mb-0" for="project_key_{{ i }}">Project:</label>
+        <input type="text" name="project_key_{{ i }}" id="project_key_{{ i }}"
+               class="form-control form-control-sm" style="width:100px"
+               placeholder="{{ default_project_key }}"
+               value="{{ epic.project_key or default_project_key }}">
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <label class="small text-muted mb-0" for="initiative_{{ i }}">Initiative:</label>
+        <input type="text" name="initiative_{{ i }}" id="initiative_{{ i }}"
+               class="form-control form-control-sm" style="width:140px"
+               placeholder="INI-123"
+               value="{{ epic.initiative_id or '' }}">
+      </div>
+      <button type="button" class="btn btn-sm btn-outline-secondary story-toggle-btn"
+              data-stories="stories_{{ i }}">
+        {{ epic.stories|length }} stories ▾
+      </button>
+    </div>
+
+    <div id="stories_{{ i }}" class="stories-container">
+      <div class="card-body py-2">
+        {% if epic.description %}
+          <p class="small text-muted mb-2">{{ epic.description }}</p>
+        {% endif %}
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th style="width:40px"></th>
+              <th>Story</th>
+              <th>Priority</th>
+              <th>Assignee</th>
+              <th>Due Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for j, story in enumerate(epic.stories) %}
+            <tr>
+              <td>
+                <input class="form-check-input story-check mt-0" type="checkbox"
+                       name="story_{{ i }}_{{ j }}"
+                       id="story_{{ i }}_{{ j }}"
+                       {% if story.include %}checked{% endif %}
+                       style="width:1.1em;height:1.1em;">
+              </td>
+              <td>
+                <label for="story_{{ i }}_{{ j }}" class="mb-0">{{ story.title }}</label>
+              </td>
+              <td>
+                <span class="badge bg-secondary">{{ story.priority }}</span>
+              </td>
+              <td class="small text-muted">{{ story.assignee or '—' }}</td>
+              <td class="small text-muted">{{ story.due_date or '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
+  <div class="d-flex gap-2 mt-3">
+    <a href="{{ url_for('import_view.index') }}" class="btn btn-outline-secondary">← Re-import</a>
+    <button type="submit" class="btn btn-primary">Confirm & Edit →</button>
+  </div>
+</form>
+{% endblock %}

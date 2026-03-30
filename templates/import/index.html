@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Step 2 – Import | JiraMaster{% endblock %}
+
+{% block content %}
+<h2 class="mb-1">Step 2: Import Copilot Output</h2>
+<p class="text-muted mb-4">Paste the YAML output from Copilot or upload a file.</p>
+
+<div class="card">
+  <div class="card-body">
+    <form method="POST" action="{{ url_for('import_view.parse') }}" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Paste YAML / JSON output</label>
+        <textarea name="copilot_output" class="form-control font-mono" rows="18"
+                  placeholder="epics:&#10;  - title: &quot;My Epic&quot;&#10;    description: &quot;...&quot;&#10;    stories:&#10;      - title: &quot;Story 1&quot;"></textarea>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">— or upload a file —</label>
+        <input type="file" name="copilot_file" class="form-control" accept=".yaml,.yml,.json,.txt">
+      </div>
+
+      <button type="submit" class="btn btn-primary">Parse →</button>
+    </form>
+  </div>
+</div>
+
+<div class="card mt-4">
+  <div class="card-header fw-semibold">Expected YAML format</div>
+  <div class="card-body">
+    <pre class="mb-0 small"><code>epics:
+  - title: "Epic title"
+    description: "Description of the epic"
+    acceptance_criteria: "When this is done, ..."
+    due_date: "2024-06-30"
+    priority: "High"
+    assignee: "Jane Smith"
+    comment: "Optional note"
+    stories:
+      - title: "Story title"
+        description: "What to build"
+        acceptance_criteria: "Definition of done"
+        due_date: "2024-05-15"
+        priority: "Medium"
+        assignee: ""
+        comment: ""</code></pre>
+  </div>
+</div>
+{% endblock %}

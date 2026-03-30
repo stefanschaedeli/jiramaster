@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}Step 1 – Generate Prompt | JiraMaster{% endblock %}
+
+{% block content %}
+<h2 class="mb-1">Step 1: Generate Copilot Prompt</h2>
+<p class="text-muted mb-4">Tune the controls and build a structured prompt for GitHub Copilot / ChatGPT. Paste meeting notes to enrich the output, or leave blank to generate a sample.</p>
+
+<form method="POST" action="{{ url_for('prompt.generate') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <!-- Hidden tuning fields (updated by JS from the sidebar controls) -->
+  <input type="hidden" name="aggressiveness" id="h_aggressiveness" value="{{ tuning.aggressiveness }}">
+  <input type="hidden" name="stories_min"    id="h_stories_min"    value="{{ tuning.stories_min }}">
+  <input type="hidden" name="stories_max"    id="h_stories_max"    value="{{ tuning.stories_max }}">
+  <input type="hidden" name="detail_level"   id="h_detail_level"   value="{{ tuning.detail_level }}">
+  <input type="hidden" name="include_subtasks" id="h_include_subtasks" value="{{ '1' if tuning.include_subtasks else '0' }}">
+
+  <div class="row g-4">
+
+    <!-- ── Sidebar: Controls ── -->
+    <div class="col-lg-3">
+      <div class="card h-100">
+        <div class="card-header fw-semibold">Prompt Controls</div>
+        <div class="card-body d-flex flex-column gap-4">
+
+          <!-- Aggressiveness -->
+          <div>
+            <label class="form-label fw-semibold mb-1">Aggressiveness</label>
+            <input type="range" class="form-range" id="aggressiveness"
+                   min="1" max="3" step="1" value="{{ tuning.aggressiveness }}">
+            <div class="d-flex justify-content-between">
+              <small class="text-muted">Conservative</small>
+              <small class="text-muted">Standard</small>
+              <small class="text-muted">Aggressive</small>
+            </div>
+            <p class="text-muted small mt-1 mb-0" id="aggressiveness_label"></p>
+          </div>
+
+          <!-- Stories per Epic -->
+          <div>
+            <label class="form-label fw-semibold mb-1">Stories per Epic</label>
+            <div class="row g-2">
+              <div class="col">
+                <label class="form-label small text-muted mb-0">Min</label>
+                <input type="number" class="form-control form-control-sm" id="stories_min"
+                       min="1" max="20" value="{{ tuning.stories_min }}">
+              </div>
+              <div class="col">
+                <label class="form-label small text-muted mb-0">Max</label>
+                <input type="number" class="form-control form-control-sm" id="stories_max"
+                       min="1" max="20" value="{{ tuning.stories_max }}">
+              </div>
+            </div>
+          </div>
+
+          <!-- Detail level -->
+          <div>
+            <label class="form-label fw-semibold mb-1">Story Detail Level</label>
+            <select class="form-select form-select-sm" id="detail_level">
+              <option value="Brief"    {% if tuning.detail_level == 'Brief'    %}selected{% endif %}>Brief</option>
+              <option value="Standard" {% if tuning.detail_level == 'Standard' %}selected{% endif %}>Standard</option>
+              <option value="Detailed" {% if tuning.detail_level == 'Detailed' %}selected{% endif %}>Detailed</option>
+            </select>
+          </div>
+
+          <!-- Sub-tasks -->
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="include_subtasks"
+                   {% if tuning.include_subtasks %}checked{% endif %}>
+            <label class="form-check-label fw-semibold" for="include_subtasks">
+              Include Sub-tasks
+            </label>
+            <p class="text-muted small mb-0">Adds 2–4 sub-task titles per story.</p>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Center: Meeting Notes ── -->
+    <div class="col-lg-5">
+      <div class="card h-100">
+        <div class="card-header fw-semibold">Meeting Notes <span class="text-muted fw-normal small">(optional)</span></div>
+        <div class="card-body d-flex flex-column">
+          <textarea name="meeting_notes" class="form-control font-mono flex-grow-1"
+                    rows="16" placeholder="Paste meeting notes to enrich the prompt — or leave blank to generate a sample.">{{ meeting_notes or '' }}</textarea>
+          <button type="submit" class="btn btn-primary mt-3 w-100">
+            Generate Prompt →
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Right: Generated Prompt ── -->
+    <div class="col-lg-4">
+      <div class="card h-100">
+        <div class="card-header d-flex justify-content-between align-items-center fw-semibold">
+          Generated Prompt
+          {% if generated_prompt %}
+            <div class="d-flex gap-1">
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="copyToClipboard('generatedPrompt')">
+                Copy
+              </button>
+              <button type="submit" form="downloadForm" class="btn btn-sm btn-outline-primary">
+                Download .txt
+              </button>
+            </div>
+          {% endif %}
+        </div>
+        <div class="card-body d-flex flex-column">
+          {% if generated_prompt %}
+            <textarea id="generatedPrompt" class="form-control font-mono flex-grow-1"
+                      rows="20" readonly>{{ generated_prompt }}</textarea>
+            <div class="mt-2 p-2 bg-light border rounded small text-muted">
+              <strong>How to use:</strong>
+              <ol class="mb-0 ps-3 mt-1">
+                <li>Click <strong>Download .txt</strong> to save this prompt as a file.</li>
+                <li>In GitHub Copilot Chat, attach the file (paperclip icon) and send it — or paste the text directly.</li>
+                <li>Copilot will reply with a YAML file. Save the raw YAML (no extra text) and upload it on the <a href="{{ url_for('import_view.index') }}">Import page</a>.</li>
+              </ol>
+            </div>
+          {% else %}
+            <div class="text-muted d-flex align-items-center justify-content-center h-100 text-center py-5">
+              <div>
+                <div class="fs-1 mb-2">📋</div>
+                <p>Generated prompt will appear here.</p>
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /row -->
+</form>
+
+<!-- Hidden form for prompt download — mirrors all tuning fields -->
+<form method="POST" action="{{ url_for('prompt.download') }}" id="downloadForm" class="d-none">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="meeting_notes" id="dl_meeting_notes" value="{{ meeting_notes or '' }}">
+  <input type="hidden" name="aggressiveness" id="dl_aggressiveness" value="{{ tuning.aggressiveness }}">
+  <input type="hidden" name="stories_min"    id="dl_stories_min"    value="{{ tuning.stories_min }}">
+  <input type="hidden" name="stories_max"    id="dl_stories_max"    value="{{ tuning.stories_max }}">
+  <input type="hidden" name="detail_level"   id="dl_detail_level"   value="{{ tuning.detail_level }}">
+  <input type="hidden" name="include_subtasks" id="dl_include_subtasks" value="{{ '1' if tuning.include_subtasks else '0' }}">
+</form>
+
+<script>
+(function () {
+  const aggressivenessLabels = {
+    1: "Conservative — explicit decisions only",
+    2: "Standard — significant actions and deliverables",
+    3: "Aggressive — all action items, even tentative ones",
+  };
+
+  function syncHidden() {
+    const agg  = document.getElementById('aggressiveness').value;
+    const smin = document.getElementById('stories_min').value;
+    const smax = document.getElementById('stories_max').value;
+    const dl   = document.getElementById('detail_level').value;
+    const sub  = document.getElementById('include_subtasks').checked ? '1' : '0';
+
+    document.getElementById('h_aggressiveness').value   = agg;
+    document.getElementById('h_stories_min').value      = smin;
+    document.getElementById('h_stories_max').value      = smax;
+    document.getElementById('h_detail_level').value     = dl;
+    document.getElementById('h_include_subtasks').value = sub;
+
+    // Keep download form in sync too
+    document.getElementById('dl_aggressiveness').value   = agg;
+    document.getElementById('dl_stories_min').value      = smin;
+    document.getElementById('dl_stories_max').value      = smax;
+    document.getElementById('dl_detail_level').value     = dl;
+    document.getElementById('dl_include_subtasks').value = sub;
+    // Mirror meeting notes textarea into download form
+    const notesEl = document.querySelector('textarea[name="meeting_notes"]');
+    if (notesEl) document.getElementById('dl_meeting_notes').value = notesEl.value;
+  }
+
+  function updateAggressivenessLabel() {
+    const val = parseInt(document.getElementById('aggressiveness').value, 10);
+    document.getElementById('aggressiveness_label').textContent = aggressivenessLabels[val] || '';
+  }
+
+  // Wire all controls
+  ['aggressiveness', 'stories_min', 'stories_max', 'detail_level', 'include_subtasks'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input', function () { syncHidden(); updateAggressivenessLabel(); });
+      el.addEventListener('change', function () { syncHidden(); updateAggressivenessLabel(); });
+    }
+  });
+
+  // Init label on page load
+  updateAggressivenessLabel();
+
+  // Sync meeting notes into download form on submit
+  const dlForm = document.getElementById('downloadForm');
+  if (dlForm) {
+    dlForm.addEventListener('submit', function () {
+      const notesEl = document.querySelector('textarea[name="meeting_notes"]');
+      if (notesEl) document.getElementById('dl_meeting_notes').value = notesEl.value;
+      syncHidden();
+    });
+  }
+})();
+</script>
+{% endblock %}

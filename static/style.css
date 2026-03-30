@@ -1,0 +1,57 @@
+/* JiraMaster — minimal Bootstrap overrides */
+
+body {
+  background-color: #f8f9fa;
+}
+
+.font-mono {
+  font-family: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.875rem;
+}
+
+/* Stick the nav brand color to primary blue */
+.navbar-brand {
+  letter-spacing: -0.5px;
+}
+
+/* Epic cards in import view */
+.epic-card .card-header {
+  background-color: #e9ecef;
+}
+
+/* Story block in edit view */
+.story-block {
+  border-color: #dee2e6 !important;
+}
+
+/* Make accordion headers more compact */
+.accordion-button {
+  padding: 0.75rem 1rem;
+  font-size: 0.95rem;
+}
+
+.accordion-button:not(.collapsed) {
+  background-color: #e7f0ff;
+  color: #0d47a1;
+}
+
+/* Smooth story list collapse */
+.stories-container {
+  overflow: hidden;
+  transition: max-height 0.2s ease-out;
+}
+
+/* Results table */
+.table td, .table th {
+  vertical-align: middle;
+}
+
+/* Small badge inside nav */
+.navbar .badge {
+  font-size: 0.65rem;
+}
+
+/* Preview upload summary cards */
+.display-6 {
+  font-size: 2rem;
+}

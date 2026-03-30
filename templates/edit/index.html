@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+{% block title %}Step 3 – Edit | JiraMaster{% endblock %}
+
+{% block content %}
+<h2 class="mb-1">Step 3: Edit Epics &amp; Stories</h2>
+<p class="text-muted mb-4">Review and edit all fields before uploading to Jira.</p>
+
+<form method="POST" action="{{ url_for('edit.save') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="accordion" id="editAccordion">
+    {% for i, epic in enumerate(epics) %}
+    {% if epic.include %}
+    <div class="accordion-item">
+      <h2 class="accordion-header">
+        <button class="accordion-button"
+                type="button" data-bs-toggle="collapse"
+                data-bs-target="#epicCollapse_{{ i }}"
+                aria-expanded="true"
+                aria-controls="epicCollapse_{{ i }}">
+          <span class="badge bg-primary me-2">Epic</span>
+          <span class="epic-title-preview">{{ epic.title }}</span>
+        </button>
+      </h2>
+      <div id="epicCollapse_{{ i }}" class="accordion-collapse collapse show">
+        <div class="accordion-body">
+          <!-- Epic fields -->
+          <div class="row g-3 mb-3">
+            <div class="col-md-8">
+              <label class="form-label fw-semibold">Title</label>
+              <input type="text" name="epic_{{ i }}_title" class="form-control"
+                     value="{{ epic.title }}" required>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label fw-semibold">Priority</label>
+              <select name="epic_{{ i }}_priority" class="form-select">
+                {% for p in ['Low', 'Medium', 'High', 'Critical'] %}
+                  <option value="{{ p }}" {% if epic.priority == p %}selected{% endif %}>{{ p }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label fw-semibold">Due Date</label>
+              <input type="date" name="epic_{{ i }}_due_date" class="form-control"
+                     value="{{ epic.due_date }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Description</label>
+              <textarea name="epic_{{ i }}_description" class="form-control" rows="3">{{ epic.description }}</textarea>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Acceptance Criteria</label>
+              <textarea name="epic_{{ i }}_ac" class="form-control" rows="3">{{ epic.acceptance_criteria }}</textarea>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Assignee</label>
+              <select name="epic_{{ i }}_assignee" class="form-select">
+                <option value="">— unassigned —</option>
+                {% for u in assignees %}
+                  <option value="{{ u.displayName }}"
+                    {% if epic.assignee == u.displayName or epic.assignee == u.emailAddress %}selected{% endif %}>
+                    {{ u.displayName }}{% if u.emailAddress %} ({{ u.emailAddress }}){% endif %}
+                  </option>
+                {% endfor %}
+              </select>
+              {% if not assignees %}
+              <div class="form-text text-warning">No assignees cached — go to Settings → Refresh Assignees</div>
+              {% endif %}
+            </div>
+            <div class="col-md-2">
+              <label class="form-label fw-semibold">Status</label>
+              <select name="epic_{{ i }}_status" class="form-select">
+                <option value="" {% if not epic.status %}selected{% endif %}>— no transition —</option>
+                {% for s in ['Draft', 'To Do', 'In Progress'] %}
+                  <option value="{{ s }}" {% if epic.status == s %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            {% if label_cache %}
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Labels</label>
+              <select name="epic_{{ i }}_labels" class="form-select" multiple size="4">
+                {% for lbl in label_cache %}
+                  <option value="{{ lbl }}" {% if lbl in epic.labels %}selected{% endif %}>{{ lbl }}</option>
+                {% endfor %}
+              </select>
+              <div class="form-text">Hold Ctrl / Cmd to select multiple. Adds to global labels from Settings.</div>
+            </div>
+            {% endif %}
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Comment</label>
+              <input type="text" name="epic_{{ i }}_comment" class="form-control"
+                     value="{{ epic.comment }}">
+            </div>
+          </div>
+
+          <!-- Stories -->
+          {% if epic.stories %}
+          <h6 class="text-muted border-bottom pb-1 mb-3">Stories</h6>
+          {% for j, story in enumerate(epic.stories) %}
+          {% if story.include %}
+          <div class="story-block border rounded p-3 mb-3 bg-light">
+            <div class="d-flex align-items-center mb-2">
+              <span class="badge bg-secondary me-2">Story</span>
+              <strong class="small">{{ story.title }}</strong>
+            </div>
+            <div class="row g-2">
+              <div class="col-md-8">
+                <label class="form-label small fw-semibold">Title</label>
+                <input type="text" name="story_{{ i }}_{{ j }}_title" class="form-control form-control-sm"
+                       value="{{ story.title }}" required>
+              </div>
+              <div class="col-md-2">
+                <label class="form-label small fw-semibold">Priority</label>
+                <select name="story_{{ i }}_{{ j }}_priority" class="form-select form-select-sm">
+                  {% for p in ['Low', 'Medium', 'High', 'Critical'] %}
+                    <option value="{{ p }}" {% if story.priority == p %}selected{% endif %}>{{ p }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-md-2">
+                <label class="form-label small fw-semibold">Due Date</label>
+                <input type="date" name="story_{{ i }}_{{ j }}_due_date" class="form-control form-control-sm"
+                       value="{{ story.due_date }}">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small fw-semibold">Description</label>
+                <textarea name="story_{{ i }}_{{ j }}_description" class="form-control form-control-sm" rows="2">{{ story.description }}</textarea>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small fw-semibold">Acceptance Criteria</label>
+                <textarea name="story_{{ i }}_{{ j }}_ac" class="form-control form-control-sm" rows="2">{{ story.acceptance_criteria }}</textarea>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label small fw-semibold">Assignee</label>
+                <select name="story_{{ i }}_{{ j }}_assignee" class="form-select form-select-sm">
+                  <option value="">— unassigned —</option>
+                  {% for u in assignees %}
+                    <option value="{{ u.displayName }}"
+                      {% if story.assignee == u.displayName or story.assignee == u.emailAddress %}selected{% endif %}>
+                      {{ u.displayName }}{% if u.emailAddress %} ({{ u.emailAddress }}){% endif %}
+                    </option>
+                  {% endfor %}
+                </select>
+                {% if not assignees %}
+                <div class="form-text text-warning">No assignees cached — go to Settings → Refresh Assignees</div>
+                {% endif %}
+              </div>
+              <div class="col-md-2">
+                <label class="form-label small fw-semibold">Status</label>
+                <select name="story_{{ i }}_{{ j }}_status" class="form-select form-select-sm">
+                  <option value="" {% if not story.status %}selected{% endif %}>— no transition —</option>
+                  {% for s in ['Draft', 'To Do', 'In Progress'] %}
+                    <option value="{{ s }}" {% if story.status == s %}selected{% endif %}>{{ s }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              {% if label_cache %}
+              <div class="col-md-6">
+                <label class="form-label small fw-semibold">Labels</label>
+                <select name="story_{{ i }}_{{ j }}_labels" class="form-select form-select-sm" multiple size="4">
+                  {% for lbl in label_cache %}
+                    <option value="{{ lbl }}" {% if lbl in story.labels %}selected{% endif %}>{{ lbl }}</option>
+                  {% endfor %}
+                </select>
+                <div class="form-text">Hold Ctrl / Cmd to select multiple.</div>
+              </div>
+              {% endif %}
+              <div class="col-md-6">
+                <label class="form-label small fw-semibold">Comment</label>
+                <input type="text" name="story_{{ i }}_{{ j }}_comment" class="form-control form-control-sm"
+                       value="{{ story.comment }}">
+              </div>
+            </div>
+          </div>
+          {% endif %}
+          {% endfor %}
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+
+  <div class="d-flex gap-2 mt-4">
+    <a href="{{ url_for('import_view.view') }}" class="btn btn-outline-secondary">← Back to Import</a>
+    <button type="submit" class="btn btn-primary">Save &amp; Preview →</button>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  function checkAC(textarea) {
+    if (!textarea.value.trim()) {
+      textarea.classList.add('border-danger');
+      let warn = textarea.parentElement.querySelector('.ac-warn');
+      if (!warn) {
+        warn = document.createElement('div');
+        warn.className = 'ac-warn form-text text-danger mt-1';
+        warn.textContent = 'Acceptance Criteria is required — leave blank only if intentional.';
+        textarea.parentElement.appendChild(warn);
+      }
+    } else {
+      textarea.classList.remove('border-danger');
+      const warn = textarea.parentElement.querySelector('.ac-warn');
+      if (warn) warn.remove();
+    }
+  }
+
+  document.querySelectorAll('textarea[name$="_ac"]').forEach(function (ta) {
+    checkAC(ta);
+    ta.addEventListener('input', function () { checkAC(ta); });
+  });
+
+  // Propagate epic assignee to stories that are still unassigned
+  document.querySelectorAll('select[name$="_assignee"]').forEach(function (epicSelect) {
+    if (!/^epic_\d+_assignee$/.test(epicSelect.name)) return;
+    var epicIndex = epicSelect.name.split('_')[1];
+    epicSelect.addEventListener('change', function () {
+      var epicValue = epicSelect.value;
+      var container = epicSelect.closest('.accordion-item');
+      container.querySelectorAll('select[name^="story_' + epicIndex + '_"]').forEach(function (storySelect) {
+        if (/^story_\d+_\d+_assignee$/.test(storySelect.name) && storySelect.value === '') {
+          storySelect.value = epicValue;
+        }
+      });
+    });
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,16 @@
+CLAUDE.local.md
+.DS_Store
+.mcp.json
+.claude/settings.local.json
+
+temp/
+
+# JiraMaster runtime files
+config.json
+.secret_key
+.work/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
