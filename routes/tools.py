@@ -100,6 +100,20 @@ def fetch_roles():
     return jsonify(roles)
 
 
+@bp.route("/fetch-groups", methods=["POST"])
+def fetch_groups():
+    """Return JSON list of {name} for groups matching an optional query."""
+    cfg = load_config()
+    if not cfg.is_configured():
+        return jsonify({"error": "Jira not configured"}), 400
+    query = request.form.get("query", "").strip()
+    client = JiraClient(cfg)
+    groups, err = client.fetch_groups(query=query)
+    if err:
+        return jsonify({"error": err}), 502
+    return jsonify(groups)
+
+
 @bp.route("/fetch-projects", methods=["POST"])
 def fetch_projects():
     """Return JSON list of {key, name} for all accessible Jira projects."""

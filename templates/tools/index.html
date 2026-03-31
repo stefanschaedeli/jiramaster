@@ -62,9 +62,16 @@
 
                 <!-- Group filter -->
                 <div class="mb-2">
-                  <label class="form-label small fw-semibold mb-1">Group Name</label>
-                  <input type="text" name="filter_group_name" class="form-control form-control-sm"
-                         placeholder="Exact Jira group name (case-sensitive)">
+                  <label class="form-label small fw-semibold mb-1">Group / Team</label>
+                  <div class="d-flex gap-2">
+                    <select name="filter_group_name" id="group-select" class="form-select form-select-sm">
+                      <option value="">— no group filter —</option>
+                    </select>
+                    <button type="button" id="load-groups-btn" class="btn btn-sm btn-outline-secondary text-nowrap">
+                      Load Groups
+                    </button>
+                  </div>
+                  <div id="groups-load-error" class="text-danger small mt-1" style="display:none;"></div>
                 </div>
 
                 <!-- Name/email query -->
@@ -128,6 +135,10 @@
   const roleSelect = document.getElementById('role-select');
   const loadRolesBtn = document.getElementById('load-roles-btn');
   const rolesErrorDiv = document.getElementById('roles-load-error');
+
+  const groupSelect = document.getElementById('group-select');
+  const loadGroupsBtn = document.getElementById('load-groups-btn');
+  const groupsErrorDiv = document.getElementById('groups-load-error');
 
   const csrfToken = document.querySelector('#refresh-assignees-form input[name="csrf_token"]').value;
 
@@ -212,6 +223,45 @@
         loadRolesBtn.textContent = 'Load Roles';
       })
       .finally(function () { loadRolesBtn.disabled = false; });
+  });
+
+  loadGroupsBtn.addEventListener('click', function () {
+    loadGroupsBtn.disabled = true;
+    loadGroupsBtn.textContent = 'Loading\u2026';
+    groupsErrorDiv.style.display = 'none';
+
+    const body = new FormData();
+    // no query — load all groups (up to 50)
+
+    fetch('{{ url_for("tools.fetch_groups") }}', {
+      method: 'POST',
+      headers: { 'X-CSRFToken': csrfToken },
+      body: body,
+    })
+      .then(function (r) {
+        if (!r.ok) return r.json().then(function (d) { throw new Error(d.error || r.statusText); });
+        return r.json();
+      })
+      .then(function (groups) {
+        if (groups.length === 0) {
+          groupSelect.innerHTML = '<option value="">— no groups found —</option>';
+        } else {
+          groupSelect.innerHTML = '<option value="">— no group filter —</option>';
+          groups.forEach(function (g) {
+            const opt = document.createElement('option');
+            opt.value = g.name;
+            opt.textContent = g.name;
+            groupSelect.appendChild(opt);
+          });
+        }
+        loadGroupsBtn.textContent = 'Reload Groups';
+      })
+      .catch(function (err) {
+        groupsErrorDiv.textContent = 'Failed to load groups: ' + err.message;
+        groupsErrorDiv.style.display = 'block';
+        loadGroupsBtn.textContent = 'Load Groups';
+      })
+      .finally(function () { loadGroupsBtn.disabled = false; });
   });
 })();
 </script>

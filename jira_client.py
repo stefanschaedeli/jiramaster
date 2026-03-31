@@ -220,6 +220,27 @@ class JiraClient:
             log.error("fetch_role_members exception: %s", exc)
             return [], str(exc)
 
+    def fetch_groups(self, query: str = "") -> Tuple[List[dict], Optional[str]]:
+        """Search Jira groups by name via GET /groups/picker.
+
+        Returns (groups, error_message). groups is a list of {name} dicts.
+        """
+        try:
+            resp = self.session.get(
+                self._url("groups/picker"),
+                params={"query": query, "maxResults": 50},
+                timeout=10,
+            )
+            if resp.status_code != 200:
+                return [], self._log_error("fetch_groups", resp)
+            data = resp.json()
+            groups = [{"name": g["name"]} for g in data.get("groups", [])]
+            log.info("fetch_groups: query=%r → %d groups", query, len(groups))
+            return groups, None
+        except requests.RequestException as exc:
+            log.error("fetch_groups exception: %s", exc)
+            return [], str(exc)
+
     def fetch_group_members(self, group_name: str, max_results: int = 200) -> Tuple[List[dict], Optional[str]]:
         """Fetch members of a Jira group via GET /group/member.
 
