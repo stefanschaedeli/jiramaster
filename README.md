@@ -132,13 +132,15 @@ cd JiraMaster
 
 ### Windows
 
-```powershell
+```bat
 git clone https://github.com/your-username/JiraMaster.git
 cd JiraMaster
-.\start.ps1
+start.bat
 ```
 
-`start.ps1` does the same as `start.sh` — no admin rights required. CA certs are merged from `Cert:\CurrentUser\Root`, `Cert:\LocalMachine\Root`, and `Cert:\LocalMachine\CA`.
+`start.bat` launches `start.ps1` with `-ExecutionPolicy Bypass`, so it works on corporate machines without admin rights or policy changes. CA certs are merged from `Cert:\CurrentUser\Root`, `Cert:\LocalMachine\Root`, and `Cert:\LocalMachine\CA`.
+
+> **Advanced:** If you have already configured your own PowerShell execution policy, you can run `.\start.ps1` directly instead.
 
 ### Manual Installation
 
