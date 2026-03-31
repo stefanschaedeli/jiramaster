@@ -74,4 +74,6 @@ Automated ${LABEL} release — changes committed by Claude Code session
 EOF
 )"
 
-echo "{\"systemMessage\": \"Auto-committed: v${CURRENT} → v${NEW_VERSION} (${LABEL})\"}"
+git push 2>/dev/null && PUSHED="pushed" || PUSHED="push failed"
+
+echo "{\"systemMessage\": \"Auto-committed: v${CURRENT} → v${NEW_VERSION} (${LABEL}) — ${PUSHED}\"}"
