@@ -1,19 +1,31 @@
 import json
-import os
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import List
 
-LABELS_FILE = os.path.join(os.path.dirname(__file__), "labels.json")
+_CACHE_FILE = Path(__file__).parent / "cache" / "labels.json"
 
 
 def load_label_cache() -> List[str]:
     """Return cached label list, or [] if file missing/corrupt."""
     try:
-        with open(LABELS_FILE) as f:
-            return json.load(f)
+        with open(_CACHE_FILE) as f:
+            data = json.load(f)
+        return data.get("items", [])
     except Exception:
         return []
 
 
+def load_label_cache_meta() -> dict:
+    """Return full cache wrapper {updated_at, items}, or defaults if missing."""
+    try:
+        with open(_CACHE_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {"updated_at": None, "items": []}
+
+
 def save_label_cache(labels: List[str]) -> None:
-    with open(LABELS_FILE, "w") as f:
-        json.dump(labels, f, indent=2)
+    _CACHE_FILE.parent.mkdir(exist_ok=True)
+    with open(_CACHE_FILE, "w") as f:
+        json.dump({"updated_at": datetime.now(timezone.utc).isoformat(), "items": labels}, f, indent=2)
