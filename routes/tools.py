@@ -25,15 +25,59 @@ def refresh_assignees():
     if not cfg.is_configured():
         flash("Configure Jira settings first.", "warning")
         return redirect(url_for("settings.index"))
+
     project_scope = request.form.get("project_scope", "").strip().upper() or None
+    role_id_raw = request.form.get("filter_role_id", "").strip()
+    group_name = request.form.get("filter_group_name", "").strip()
+    query = request.form.get("filter_query", "").strip() or None
+    max_results_raw = request.form.get("filter_max_results", "50").strip()
+
+    try:
+        max_results = max(10, min(200, int(max_results_raw)))
+    except ValueError:
+        max_results = 50
+
     client = JiraClient(cfg)
-    users, err = client.fetch_assignees(project_key=project_scope)
+
+    # Step 1: base pool from assignable search
+    users, err = client.fetch_assignees(project_key=project_scope, query=query, max_results=max_results)
     if err:
         flash(f"Failed to fetch assignees: {err}", "danger")
-    else:
-        label = project_scope or cfg.project_key
-        save_assignees(users)
-        flash(f"Fetched {len(users)} assignees from {label} and saved to assignees.json.", "success")
+        return redirect(url_for("tools.index"))
+
+    # Step 2: intersect with role members if role selected
+    if role_id_raw:
+        try:
+            role_id = int(role_id_raw)
+        except ValueError:
+            role_id = None
+        if role_id is not None:
+            role_ids, role_err = client.fetch_role_members(role_id, project_key=project_scope)
+            if role_err:
+                flash(f"Warning: Could not fetch role members ({role_err}). Role filter skipped.", "warning")
+            else:
+                role_set = set(role_ids)
+                users = [u for u in users if u["accountId"] in role_set]
+                log.info("refresh_assignees: after role filter → %d users", len(users))
+
+    # Step 3: intersect with group members if group provided
+    if group_name:
+        group_users, group_err = client.fetch_group_members(group_name)
+        if group_err:
+            flash(f"Warning: Could not fetch group '{group_name}' ({group_err}). Group filter skipped.", "warning")
+        else:
+            group_ids = {u["accountId"] for u in group_users}
+            users = [u for u in users if u["accountId"] in group_ids]
+            log.info("refresh_assignees: after group filter → %d users", len(users))
+
+    # Guard: don't wipe cache if all filters combined yielded nothing
+    if not users and (role_id_raw or group_name or query):
+        flash("All filters combined returned 0 users — cache not updated. Relax your filters and try again.", "warning")
+        return redirect(url_for("tools.index"))
+
+    label = project_scope or cfg.project_key
+    save_assignees(users)
+    flash(f"Fetched {len(users)} assignees from {label} and saved to assignees.json.", "success")
     return redirect(url_for("tools.index"))
 
 
