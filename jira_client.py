@@ -76,6 +76,8 @@ class JiraClient:
         self.project_key = cfg.project_key
         self.ac_field_id = cfg.ac_field_id or ""
         self.api_base = f"{self.base_url}/rest/api/3"
+        self._org_id: str = cfg.org_id
+        self._teams_base = f"https://api.atlassian.com/gateway/api/public/teams/v1/org/{self._org_id}"
 
         self.labels: List[str] = cfg.labels or []
 
@@ -239,6 +241,69 @@ class JiraClient:
             return groups, None
         except requests.RequestException as exc:
             log.error("fetch_groups exception: %s", exc)
+            return [], str(exc)
+
+    def fetch_teams(self, query: str = "") -> Tuple[List[dict], Optional[str]]:
+        """Search Atlassian Teams via GET /gateway/api/public/teams/v1/org/{orgId}/teams.
+
+        Requires org_id to be set in JiraConfig. Returns ([{teamId, displayName}], error).
+        """
+        if not self._org_id:
+            return [], "Atlassian Org ID not configured — set it in Settings"
+        try:
+            resp = self.session.get(
+                f"{self._teams_base}/teams",
+                params={"query": query, "maxResults": 50},
+                timeout=10,
+            )
+            if resp.status_code != 200:
+                return [], self._log_error("fetch_teams", resp)
+            data = resp.json()
+            teams = [
+                {"teamId": t.get("teamId") or t.get("id", ""), "displayName": t.get("displayName", "")}
+                for t in data.get("values", [])
+                if t.get("teamId") or t.get("id")
+            ]
+            log.info("fetch_teams: query=%r → %d teams", query, len(teams))
+            return teams, None
+        except requests.RequestException as exc:
+            log.error("fetch_teams exception: %s", exc)
+            return [], str(exc)
+
+    def fetch_team_members(self, team_id: str) -> Tuple[List[dict], Optional[str]]:
+        """Fetch members of an Atlassian Team.
+
+        GET /gateway/api/public/teams/v1/org/{orgId}/teams/{teamId}/members
+        Returns [{accountId}] list. Paginates via nextCursor.
+        """
+        if not self._org_id:
+            return [], "Atlassian Org ID not configured — set it in Settings"
+        try:
+            members: List[dict] = []
+            cursor = None
+            while True:
+                params: dict = {"maxResults": 50}
+                if cursor:
+                    params["cursor"] = cursor
+                resp = self.session.get(
+                    f"{self._teams_base}/teams/{team_id}/members",
+                    params=params,
+                    timeout=10,
+                )
+                if resp.status_code != 200:
+                    return [], self._log_error("fetch_team_members", resp)
+                data = resp.json()
+                for m in data.get("results", []):
+                    account_id = m.get("accountId") or (m.get("member", {}) or {}).get("accountId")
+                    if account_id:
+                        members.append({"accountId": account_id})
+                cursor = data.get("nextCursor")
+                if not cursor or not data.get("results"):
+                    break
+            log.info("fetch_team_members: team_id=%r → %d members", team_id, len(members))
+            return members, None
+        except requests.RequestException as exc:
+            log.error("fetch_team_members exception: %s", exc)
             return [], str(exc)
 
     def fetch_group_members(self, group_name: str, max_results: int = 200) -> Tuple[List[dict], Optional[str]]:
