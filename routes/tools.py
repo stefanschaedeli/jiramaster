@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
+from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, session
 import logging
 
 from config import load_config
@@ -18,12 +18,14 @@ def index():
     assignees = load_assignees()
     label_cache = load_label_cache()
     projects_cache = load_projects()
+    selected_project = session.get("tools_last_project")
     return render_template(
         "tools/index.html",
         assignees=assignees,
         label_cache=label_cache,
         projects_cache=projects_cache,
         cfg=cfg,
+        selected_project=selected_project,
     )
 
 
@@ -35,6 +37,7 @@ def refresh_assignees():
         return redirect(url_for("settings.index"))
 
     project_scope = request.form.get("project_scope", "").strip().upper() or None
+    session["tools_last_project"] = project_scope or cfg.project_key
     role_id_raw = request.form.get("filter_role_id", "").strip()
     group_name = request.form.get("filter_group_name", "").strip()
     query = request.form.get("filter_query", "").strip() or None

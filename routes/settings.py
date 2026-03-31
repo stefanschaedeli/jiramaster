@@ -57,6 +57,20 @@ def detect_fields():
     return redirect(url_for("settings.index"))
 
 
+@bp.route("/detect-org-id", methods=["POST"])
+def detect_org_id():
+    cfg = load_config()
+    client = JiraClient(cfg)
+    cloud_id, err = client.fetch_cloud_id()
+    if cloud_id:
+        cfg.org_id = cloud_id
+        save_config(cfg)
+        flash(f"Detected Org ID: {cloud_id}. Saved to config.", "success")
+    else:
+        flash(f"Could not detect Org ID: {err}", "danger")
+    return redirect(url_for("settings.index"))
+
+
 @bp.route("/test", methods=["POST"])
 def test_connection():
     base_url = request.form.get("base_url", "").strip().rstrip("/")

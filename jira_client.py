@@ -129,6 +129,28 @@ class JiraClient:
             log.error("detect_ac_field exception: %s", exc)
             return None, str(exc)
 
+    def fetch_cloud_id(self) -> Tuple[Optional[str], Optional[str]]:
+        """Fetch the Atlassian Cloud ID (site ID) via GET /_edge/tenant_info.
+
+        This endpoint is available on all Jira Cloud instances without admin access.
+        The cloud ID is used as the Org ID for the Atlassian Teams API.
+
+        Returns (cloud_id, error_message). cloud_id is None on failure.
+        """
+        url = self.base_url + "/_edge/tenant_info"
+        try:
+            resp = self.session.get(url, timeout=10)
+            if resp.status_code != 200:
+                return None, f"HTTP {resp.status_code}: {resp.text[:200]}"
+            cloud_id = resp.json().get("cloudId")
+            if not cloud_id:
+                return None, "Response did not contain cloudId"
+            log.info("fetch_cloud_id: cloudId=%s", cloud_id)
+            return cloud_id, None
+        except requests.RequestException as exc:
+            log.error("fetch_cloud_id exception: %s", exc)
+            return None, str(exc)
+
     def fetch_assignees(self, max_results: int = 50, project_key: Optional[str] = None, query: Optional[str] = None) -> Tuple[List[dict], Optional[str]]:
         """Fetch top assignable users for the project.
 
@@ -216,8 +238,28 @@ class JiraClient:
                 for a in actors
                 if a.get("type") == "atlassian-user-role-actor" and a.get("actorUser", {}).get("accountId")
             ]
-            log.info("fetch_role_members: role_id=%d → %d members", role_id, len(account_ids))
-            return account_ids, None
+            # Also resolve group actors — roles commonly have groups rather than individual users
+            group_actors = [a for a in actors if a.get("type") == "atlassian-group-role-actor"]
+            if group_actors:
+                log.info("fetch_role_members: role_id=%d has %d group actor(s), resolving members", role_id, len(group_actors))
+            for ga in group_actors:
+                group_name = ga.get("name")
+                if not group_name:
+                    continue
+                members, group_err = self.fetch_group_members(group_name)
+                if group_err:
+                    log.warning("fetch_role_members: could not resolve group %r: %s", group_name, group_err)
+                    continue
+                account_ids.extend(m["accountId"] for m in members)
+            # Deduplicate while preserving order
+            seen: set = set()
+            unique_ids = []
+            for aid in account_ids:
+                if aid not in seen:
+                    seen.add(aid)
+                    unique_ids.append(aid)
+            log.info("fetch_role_members: role_id=%d → %d members (incl. group-resolved)", role_id, len(unique_ids))
+            return unique_ids, None
         except requests.RequestException as exc:
             log.error("fetch_role_members exception: %s", exc)
             return [], str(exc)

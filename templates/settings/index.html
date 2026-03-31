@@ -71,12 +71,17 @@
             <label for="org_id" class="form-label fw-semibold">
               Atlassian Org ID <span class="text-muted fw-normal">(optional)</span>
             </label>
-            <input type="text" name="org_id" id="org_id" class="form-control"
-                   value="{{ cfg.org_id }}" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                   style="width:360px" maxlength="64">
+            <div class="d-flex gap-2 align-items-center">
+              <input type="text" name="org_id" id="org_id" class="form-control"
+                     value="{{ cfg.org_id }}" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                     style="width:360px" maxlength="64">
+              <button type="submit" form="detectOrgForm" class="btn btn-outline-info text-nowrap">
+                Detect
+              </button>
+            </div>
             <div class="form-text">
-              Required for the Atlassian Teams filter. Find it in
-              <strong>admin.atlassian.com → Settings → Organization</strong> — the UUID in the URL.
+              Required for the Atlassian Teams filter. Click <strong>Detect</strong> to auto-discover, or find it manually in
+              <strong>admin.atlassian.com → Settings → Organization</strong>.
             </div>
           </div>
 
@@ -104,6 +109,11 @@
 
         <!-- Separate form for field detection -->
         <form method="POST" action="{{ url_for('settings.detect_fields') }}" id="detectForm" class="d-none">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        </form>
+
+        <!-- Separate form for org ID detection -->
+        <form method="POST" action="{{ url_for('settings.detect_org_id') }}" id="detectOrgForm" class="d-none">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         </form>
 

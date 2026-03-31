@@ -22,19 +22,21 @@
 
         <form method="POST" action="{{ url_for('tools.refresh_assignees') }}" id="refresh-assignees-form" class="flex-grow-1 d-flex flex-column">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="hidden" name="project_scope" id="project-scope-hidden" value="{{ cfg.project_key if cfg else '' }}">
+          <input type="hidden" name="project_scope" id="project-scope-hidden" value="{{ selected_project or (cfg.project_key if cfg else '') }}">
 
           <!-- Project scope -->
           <div class="mb-3">
             <label for="project-scope-select" class="form-label small fw-semibold">Fetch scope</label>
             <div class="d-flex gap-2">
+              {% set _default_key = cfg.project_key if cfg else '' %}
+              {% set _sel = selected_project or _default_key %}
               <select id="project-scope-select" class="form-select form-select-sm">
-                <option value="{{ cfg.project_key if cfg else '' }}" selected>
-                  {{ cfg.project_key if cfg else '(not configured)' }} — configured default
+                <option value="{{ _default_key }}"{% if _sel == _default_key or not _sel %} selected{% endif %}>
+                  {{ _default_key or '(not configured)' }} — configured default
                 </option>
                 {% for p in projects_cache %}
-                  {% if p.key != (cfg.project_key if cfg else '') %}
-                    <option value="{{ p.key }}">{{ p.key }} — {{ p.name }}</option>
+                  {% if p.key != _default_key %}
+                    <option value="{{ p.key }}"{% if p.key == _sel %} selected{% endif %}>{{ p.key }} — {{ p.name }}</option>
                   {% endif %}
                 {% endfor %}
               </select>
