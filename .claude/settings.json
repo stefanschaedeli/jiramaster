@@ -1,18 +1,26 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm run lint)",
-      "Bash(npm run test)",
-      "Bash(npm run test:*)",
-      "Bash(npm run typecheck)",
+      "Bash(python -m pytest*)",
+      "Bash(python -m flake8*)",
+      "Bash(python -m mypy*)",
+      "Bash(pip install*)",
+      "Bash(venv/bin/pip install*)",
+      "Bash(venv/bin/python*)",
+      "Bash(python app.py*)",
+      "Bash(python3 app.py*)",
       "Bash(git status)",
-      "Bash(git diff)"
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add*)",
+      "Bash(git commit*)"
     ],
     "deny": [
       "Read(.env*)",
       "Read(~/.ssh/*)",
-      "Bash(rm -rf:*)",
-      "Bash(sudo:*)"
+      "Read(config.json)",
+      "Bash(rm -rf*)",
+      "Bash(sudo*)"
     ]
   }
 }

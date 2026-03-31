@@ -3,8 +3,8 @@ from flask import Blueprint, render_template, request, flash, redirect, url_for
 from config import load_config, save_config
 from models import JiraConfig
 from jira_client import JiraClient
-from assignees import load_assignees, save_assignees
-from labels import load_label_cache, save_label_cache
+from assignees import load_assignees
+from labels import load_label_cache
 
 bp = Blueprint("settings", __name__, url_prefix="/settings")
 
@@ -55,38 +55,6 @@ def detect_fields():
         flash(f"Detected Acceptance Criteria field: {result} ({field_id}). Saved to config.", "success")
     else:
         flash(f"Field detection failed: {result}", "danger")
-    return redirect(url_for("settings.index"))
-
-
-@bp.route("/refresh-assignees", methods=["POST"])
-def refresh_assignees():
-    cfg = load_config()
-    if not cfg.is_configured():
-        flash("Configure Jira settings first.", "warning")
-        return redirect(url_for("settings.index"))
-    client = JiraClient(cfg)
-    users, err = client.fetch_assignees()
-    if err:
-        flash(f"Failed to fetch assignees: {err}", "danger")
-    else:
-        save_assignees(users)
-        flash(f"Fetched {len(users)} assignees and saved to assignees.json.", "success")
-    return redirect(url_for("settings.index"))
-
-
-@bp.route("/refresh-labels", methods=["POST"])
-def refresh_labels():
-    cfg = load_config()
-    if not cfg.is_configured():
-        flash("Configure Jira settings first.", "warning")
-        return redirect(url_for("settings.index"))
-    client = JiraClient(cfg)
-    fetched, err = client.fetch_labels()
-    if err:
-        flash(f"Failed to fetch labels: {err}", "danger")
-    else:
-        save_label_cache(fetched)
-        flash(f"Saved top {len(fetched)} most-used labels to labels.json.", "success")
     return redirect(url_for("settings.index"))
 
 

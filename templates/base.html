@@ -14,44 +14,62 @@
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
   <div class="container">
     <a class="navbar-brand fw-bold" href="{{ url_for('prompt.index') }}">⚡ JiraMaster</a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+            aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
       <span class="navbar-toggler-icon"></span>
     </button>
     <div class="collapse navbar-collapse" id="navbarNav">
       <ul class="navbar-nav me-auto">
         <li class="nav-item">
-          <a class="nav-link {% if request.path.startswith('/prompt') %}active{% endif %}"
-             href="{{ url_for('prompt.index') }}">1. Prompt</a>
+          <a class="nav-link {% if request.path.startswith(('/prompt', '/import', '/edit', '/upload')) %}active{% endif %}"
+             href="{{ url_for('prompt.index') }}">Meeting to Jira</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link {% if request.path.startswith('/import') %}active{% endif %}"
-             href="{{ url_for('import_view.index') }}">2. Import</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link {% if request.path.startswith('/edit') %}active{% endif %}"
-             href="{{ url_for('edit.index') }}">3. Edit</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link {% if request.path.startswith('/upload') %}active{% endif %}"
-             href="{{ url_for('upload.preview') }}">4. Upload</a>
+          <a class="nav-link {% if request.path.startswith('/tools') %}active{% endif %}"
+             href="{{ url_for('tools.index') }}">Jira Tools</a>
         </li>
       </ul>
       <ul class="navbar-nav">
         <li class="nav-item">
           <a class="nav-link {% if request.path.startswith('/settings') %}active{% endif %}"
-             href="{{ url_for('settings.index') }}">
+             href="{{ url_for('settings.index') }}" title="Settings">
             {% if jira_configured %}
               <span class="badge bg-success me-1">✓</span>
             {% else %}
               <span class="badge bg-warning text-dark me-1">!</span>
             {% endif %}
-            Settings
+            ⚙
           </a>
         </li>
       </ul>
     </div>
   </div>
 </nav>
+
+{% if request.path.startswith(('/prompt', '/import', '/edit', '/upload')) %}
+<nav class="navbar navbar-expand navbar-light bg-light border-bottom py-1 wizard-subnav">
+  <div class="container">
+    <ul class="navbar-nav">
+      <li class="nav-item">
+        <a class="nav-link {% if request.path.startswith('/prompt') %}active fw-semibold{% endif %}"
+           href="{{ url_for('prompt.index') }}">1. Prompt</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if request.path.startswith('/import') %}active fw-semibold{% endif %}"
+           href="{{ url_for('import_view.index') }}">2. Import</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if request.path.startswith('/edit') %}active fw-semibold{% endif %}"
+           href="{{ url_for('edit.index') }}">3. Edit</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if request.path.startswith('/upload') %}active fw-semibold{% endif %}"
+           href="{{ url_for('upload.preview') }}">4. Upload</a>
+      </li>
+    </ul>
+  </div>
+</nav>
+{% endif %}
 
 <div class="container mt-4 mb-5">
   {% with messages = get_flashed_messages(with_categories=true) %}

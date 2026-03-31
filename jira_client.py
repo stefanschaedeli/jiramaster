@@ -4,19 +4,32 @@ import json
 import logging
 from typing import List, Optional, Tuple
 
+import certifi
 import requests
-import urllib3
 from requests.auth import HTTPBasicAuth
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
 log = logging.getLogger(__name__)
 
-# Certificate verification is disabled to allow corporate TLS inspection proxies.
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-_CA_BUNDLE = False
+
+def _resolve_ca_bundle():
+    """Determine the CA bundle for SSL verification.
+
+    Priority: REQUESTS_CA_BUNDLE env var > SSL_CERT_FILE env var > certifi default.
+    Both start.sh (macOS) and start.ps1 (Windows) export these env vars after
+    merging system/corporate CA certificates into the certifi bundle.
+    """
+    import os
+    for var in ("REQUESTS_CA_BUNDLE", "SSL_CERT_FILE"):
+        path = os.environ.get(var)
+        if path and os.path.isfile(path):
+            log.info("Using CA bundle from %s: %s", var, path)
+            return path
+    default = certifi.where()
+    log.info("Using default certifi CA bundle: %s", default)
+    return default
+
+
+_CA_BUNDLE = _resolve_ca_bundle()
 
 from models import Epic, Story, JiraConfig, UploadResult
 from assignees import load_assignees
@@ -114,14 +127,20 @@ class JiraClient:
             log.error("detect_ac_field exception: %s", exc)
             return None, str(exc)
 
-    def fetch_assignees(self, max_results: int = 20) -> Tuple[List[dict], Optional[str]]:
+    def fetch_assignees(self, max_results: int = 20, project_key: Optional[str] = None) -> Tuple[List[dict], Optional[str]]:
         """Fetch top assignable users for the project.
+
+        Args:
+            max_results: Maximum number of users to return.
+            project_key: Override the configured project key. Falls back to self.project_key.
+
         Returns (users, error_message). users is [] on failure.
         """
+        effective_project = project_key or self.project_key
         try:
             resp = self.session.get(
                 self._url("user/assignable/search"),
-                params={"project": self.project_key, "maxResults": max_results},
+                params={"project": effective_project, "maxResults": max_results},
                 timeout=10,
             )
             if resp.status_code != 200:
@@ -138,6 +157,35 @@ class JiraClient:
             return users[:max_results], None
         except requests.RequestException as exc:
             log.error("fetch_assignees exception: %s", exc)
+            return [], str(exc)
+
+    def fetch_projects(self) -> Tuple[List[dict], Optional[str]]:
+        """Fetch all accessible projects via GET /rest/api/3/project/search (paginated).
+
+        Returns (projects, error_message). projects is a list of {key, name} dicts.
+        """
+        try:
+            projects: List[dict] = []
+            start_at = 0
+            while True:
+                resp = self.session.get(
+                    self._url("project/search"),
+                    params={"startAt": start_at, "maxResults": 50},
+                    timeout=10,
+                )
+                if resp.status_code != 200:
+                    return [], self._log_error("fetch_projects", resp)
+                data = resp.json()
+                page = data.get("values", [])
+                for p in page:
+                    projects.append({"key": p["key"], "name": p.get("name", p["key"])})
+                if not page or len(projects) >= data.get("total", 0):
+                    break
+                start_at += len(page)
+            log.info("fetch_projects: %d projects found", len(projects))
+            return projects, None
+        except requests.RequestException as exc:
+            log.error("fetch_projects exception: %s", exc)
             return [], str(exc)
 
     def fetch_labels(self, top_n: int = 40) -> Tuple[List[str], Optional[str]]:

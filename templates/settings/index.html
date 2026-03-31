@@ -85,7 +85,7 @@
               <div class="form-text">Checked labels are applied to every epic and story created by this tool.</div>
             {% else %}
               <div class="form-text text-warning">
-                No label cache — click <strong>Refresh Labels</strong> to load available labels from Jira.
+                No label cache — go to <a href="{{ url_for('tools.index') }}"><strong>Jira Tools</strong></a> to load available labels from Jira.
               </div>
             {% endif %}
           </div>
@@ -97,12 +97,6 @@
             </button>
             <button type="submit" form="detectForm" class="btn btn-outline-info">
               Detect Fields
-            </button>
-            <button type="submit" form="refreshAssigneesForm" class="btn btn-outline-secondary">
-              Refresh Assignees
-            </button>
-            <button type="submit" form="refreshLabelsForm" class="btn btn-outline-secondary">
-              Refresh Labels
             </button>
           </div>
         </form>
@@ -122,15 +116,6 @@
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         </form>
 
-        <!-- Separate form for assignee refresh -->
-        <form method="POST" action="{{ url_for('settings.refresh_assignees') }}" id="refreshAssigneesForm" class="d-none">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        </form>
-
-        <!-- Separate form for label refresh -->
-        <form method="POST" action="{{ url_for('settings.refresh_labels') }}" id="refreshLabelsForm" class="d-none">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        </form>
       </div>
     </div>
 
@@ -164,9 +149,9 @@
             <div>
               <div class="fw-semibold small">Assignee Cache</div>
               {% if assignees %}
-                <div class="small text-muted">{{ assignees|length }} users cached — click "Refresh Assignees" to update</div>
+                <div class="small text-muted">{{ assignees|length }} users cached — <a href="{{ url_for('tools.index') }}">Jira Tools</a> to update</div>
               {% else %}
-                <div class="small text-muted">No cache — click "Refresh Assignees" to fetch from Jira</div>
+                <div class="small text-muted">No cache — go to <a href="{{ url_for('tools.index') }}">Jira Tools</a> to fetch from Jira</div>
               {% endif %}
             </div>
           </div>
@@ -175,9 +160,9 @@
             <div>
               <div class="fw-semibold small">Label Cache</div>
               {% if label_cache %}
-                <div class="small text-muted">{{ label_cache|length }} labels cached — click "Refresh Labels" to update</div>
+                <div class="small text-muted">{{ label_cache|length }} labels cached — <a href="{{ url_for('tools.index') }}">Jira Tools</a> to update</div>
               {% else %}
-                <div class="small text-muted">No cache — click "Refresh Labels" to fetch from Jira</div>
+                <div class="small text-muted">No cache — go to <a href="{{ url_for('tools.index') }}">Jira Tools</a> to fetch from Jira</div>
               {% endif %}
               {% if cfg.labels %}
                 <div class="small text-muted mt-1">Selected: {{ cfg.labels | join(', ') }}</div>

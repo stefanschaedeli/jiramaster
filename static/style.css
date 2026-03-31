@@ -55,3 +55,28 @@ body {
 .display-6 {
   font-size: 2rem;
 }
+
+/* Wizard sub-nav (secondary bar below top nav) */
+.wizard-subnav .container {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.wizard-subnav .navbar-nav {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.wizard-subnav .nav-link {
+  font-size: 0.875rem;
+  padding: 0.25rem 0.75rem;
+  color: #495057;
+}
+
+.wizard-subnav .nav-link.active {
+  color: #0d6efd;
+}
+
+.wizard-subnav .nav-link:hover {
+  color: #0d6efd;
+}

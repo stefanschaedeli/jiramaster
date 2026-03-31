@@ -9,6 +9,7 @@ temp/
 config.json
 .secret_key
 .work/
+logs/
 venv/
 __pycache__/
 *.pyc

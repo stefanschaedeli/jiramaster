@@ -3,6 +3,13 @@ set -e
 
 cd "$(dirname "$0")"
 
+# Ensure logs directory exists and tee all output there
+mkdir -p logs
+STARTUP_LOG="logs/startup.log"
+exec > >(tee -a "$STARTUP_LOG") 2>&1
+echo ""
+echo "=== JiraMaster startup — $(date) ==="
+
 # Create venv if missing
 if [ ! -d "venv" ]; then
   echo "Creating virtual environment..."
@@ -32,6 +39,9 @@ if [ -f "$SYSTEM_CERTS" ]; then
 fi
 export SSL_CERT_FILE="$CERTIFI_BUNDLE"
 export REQUESTS_CA_BUNDLE="$CERTIFI_BUNDLE"
+
+echo "SSL_CERT_FILE=$SSL_CERT_FILE"
+echo "REQUESTS_CA_BUNDLE=$REQUESTS_CA_BUNDLE"
 
 # Start the app
 echo "Starting JiraMaster on http://127.0.0.1:5000"

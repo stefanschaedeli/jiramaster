@@ -11,12 +11,14 @@ def is_valid_work_id(work_id: str) -> bool:
 
 def register_blueprints(app: Flask) -> None:
     from routes.settings import bp as settings_bp
+    from routes.tools import bp as tools_bp
     from routes.prompt import bp as prompt_bp
     from routes.import_view import bp as import_bp
     from routes.edit import bp as edit_bp
     from routes.upload import bp as upload_bp
 
     app.register_blueprint(settings_bp)
+    app.register_blueprint(tools_bp)
     app.register_blueprint(prompt_bp)
     app.register_blueprint(import_bp)
     app.register_blueprint(edit_bp)

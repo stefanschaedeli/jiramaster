@@ -1,9 +1,15 @@
+import logging
 import os
 import secrets
 from pathlib import Path
 
+from logging_config import setup_logging
+setup_logging()
+
 from flask import Flask, session
 from flask_wtf.csrf import CSRFProtect
+
+log = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 MB upload limit
@@ -45,5 +51,5 @@ def inject_globals():
 
 if __name__ == "__main__":
     debug = os.environ.get("FLASK_DEBUG", "0") == "1"
-    print("Starting JiraMaster on http://127.0.0.1:5000")
+    log.info("Starting JiraMaster on http://127.0.0.1:5000")
     app.run(debug=debug, port=5000)
