@@ -45,11 +45,14 @@ def refresh_assignees():
         flash(f"Failed to fetch assignees: {err}", "danger")
         return redirect(url_for("tools.index"))
 
+    filters_applied = bool(query)
+
     # Step 2: intersect with role members if role selected
     if role_id_raw:
         try:
             role_id = int(role_id_raw)
         except ValueError:
+            log.warning("refresh_assignees: invalid role_id_raw=%r, role filter skipped", role_id_raw)
             role_id = None
         if role_id is not None:
             role_ids, role_err = client.fetch_role_members(role_id, project_key=project_scope)
@@ -58,6 +61,7 @@ def refresh_assignees():
             else:
                 role_set = set(role_ids)
                 users = [u for u in users if u["accountId"] in role_set]
+                filters_applied = True
                 log.info("refresh_assignees: after role filter → %d users", len(users))
 
     # Step 3: intersect with group members if group provided
@@ -68,10 +72,11 @@ def refresh_assignees():
         else:
             group_ids = {u["accountId"] for u in group_users}
             users = [u for u in users if u["accountId"] in group_ids]
+            filters_applied = True
             log.info("refresh_assignees: after group filter → %d users", len(users))
 
-    # Guard: don't wipe cache if all filters combined yielded nothing
-    if not users and (role_id_raw or group_name or query):
+    # Guard: don't wipe cache if filters were applied but yielded nothing
+    if not users and filters_applied:
         flash("All filters combined returned 0 users — cache not updated. Relax your filters and try again.", "warning")
         return redirect(url_for("tools.index"))
 
