@@ -1,7 +1,21 @@
 import json
+import logging
 import os
 from pathlib import Path
 from models import JiraConfig
+
+try:
+    import keyring
+    import keyring.errors
+    _KEYRING_AVAILABLE = True
+except ImportError:
+    _KEYRING_AVAILABLE = False
+
+KEYRING_SERVICE = "jiramaster"
+KEYRING_USERNAME_KEY = "username"
+KEYRING_TOKEN_KEY = "api_token"
+
+log = logging.getLogger(__name__)
 
 CONFIG_FILE = Path(__file__).parent / "config.json"
 PROMPT_TEMPLATE_FILE = Path(__file__).parent / "prompt_template.txt"
@@ -39,19 +53,48 @@ MEETING NOTES:
 
 
 def load_config() -> JiraConfig:
+    cfg = JiraConfig()
     if CONFIG_FILE.exists():
         try:
             with open(CONFIG_FILE) as f:
                 data = json.load(f)
-            return JiraConfig.from_dict(data)
+            cfg = JiraConfig.from_dict(data)
         except (json.JSONDecodeError, KeyError):
             pass
-    return JiraConfig()
+    # Overlay sensitive fields from OS keyring if available
+    if _KEYRING_AVAILABLE:
+        try:
+            username = keyring.get_password(KEYRING_SERVICE, KEYRING_USERNAME_KEY)
+            api_token = keyring.get_password(KEYRING_SERVICE, KEYRING_TOKEN_KEY)
+            if username is not None:
+                cfg.username = username
+            if api_token is not None:
+                cfg.api_token = api_token
+        except Exception as e:
+            log.warning("Could not read from keyring (%s) — using config.json values", e)
+    return cfg
 
 
 def save_config(cfg: JiraConfig) -> None:
+    # Attempt to store sensitive fields in OS keyring
+    if _KEYRING_AVAILABLE:
+        try:
+            keyring.set_password(KEYRING_SERVICE, KEYRING_USERNAME_KEY, cfg.username)
+            keyring.set_password(KEYRING_SERVICE, KEYRING_TOKEN_KEY, cfg.api_token)
+            # Write config.json without sensitive fields
+            data = cfg.to_dict()
+            data["username"] = ""
+            data["api_token"] = ""
+            with open(CONFIG_FILE, "w") as f:
+                json.dump(data, f, indent=2)
+            log.info("Credentials stored securely in OS keyring")
+            return
+        except Exception as e:
+            log.warning("Keyring unavailable (%s) — falling back to config.json", e)
+    # Fallback: plaintext (keyring unavailable)
     with open(CONFIG_FILE, "w") as f:
         json.dump(cfg.to_dict(), f, indent=2)
+    log.warning("Credentials stored in plaintext config.json (keyring unavailable)")
 
 
 def load_prompt_template() -> str:
