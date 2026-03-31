@@ -8,7 +8,7 @@ JiraMaster is a Flask web application that bridges the gap between your AI assis
 ![Flask](https://img.shields.io/badge/Flask-3.x-lightgrey)
 ![Jira Cloud](https://img.shields.io/badge/Jira-Cloud%20REST%20v3-0052CC)
 ![License](https://img.shields.io/badge/License-GPLv3-green)
-![Version](https://img.shields.io/badge/version-1.1.0-orange)
+![Version](https://img.shields.io/badge/version-1.7.0-orange)
 
 ---
 
@@ -65,6 +65,7 @@ No database. No migrations. Works out of the box with `./scripts/start.sh`.
 - **ADF dual-mode** — acceptance criteria are written in Atlassian Document Format (ADF); falls back to plain text if the field doesn't support ADF.
 - **TLS proxy support** — `scripts/start.sh`/`scripts/start.ps1` merge your system CA certificates into the certifi bundle automatically, so corporate TLS-inspection proxies work without admin rights.
 - **Centralised logging** — all modules use `logging.getLogger(__name__)`; a single `setup_logging()` call in `app.py` routes everything to a rotating file log and console.
+- **Secure credential storage** — API tokens can be stored in the OS keyring (macOS Keychain, Windows Credential Manager) instead of plaintext `config.json`.
 
 ---
 
@@ -126,7 +127,7 @@ cd JiraMaster
 
 `scripts/start.sh` will:
 1. Create a Python virtual environment (`venv/`)
-2. Install all dependencies from `requirements.txt`
+2. Install all dependencies from `requirements.txt` (including `keyring`)
 3. Merge system CA certificates into the certifi bundle (for TLS-inspection proxies)
 4. Start the app at **http://127.0.0.1:5000**
 
@@ -160,6 +161,7 @@ python app.py
 | `PyYAML >= 6.0.1` | Parse LLM YAML output |
 | `requests >= 2.31` | Jira REST API calls |
 | `certifi >= 2024` | CA certificate bundle |
+| `keyring >= 25.0` | OS keyring for secure credential storage |
 
 ---
 
@@ -178,7 +180,14 @@ On first run, open **http://127.0.0.1:5000/settings** to enter your Jira credent
 | **Acceptance Criteria Field ID** | Custom field ID for AC (e.g. `customfield_11401`). Use **Detect Fields** to find it automatically. |
 | **HTTP Proxy URL** | Optional. For corporate proxies: `http://proxy.company.com:8080` |
 
-Credentials are saved to `config.json` in the project directory. This file is **gitignored and never committed**.
+Credentials are saved to `config.json` in the project directory (gitignored). If the OS keyring is available, the API token is stored there instead of in plaintext.
+
+### Security Status
+
+The Settings page shows a **Security Status** panel with:
+- **Credential storage mode** — `keyring` (secure) or `config file` (plaintext)
+- **SSL configuration** — whether a custom CA bundle or proxy is active
+- **API token state** — whether a token is stored and where
 
 ### Getting a Jira API Token
 
@@ -317,11 +326,26 @@ For each epic/story, JiraMaster:
 
 Navigate to **Jira Tools** in the top nav.
 
-| Tool | What it does |
-|------|-------------|
-| **Refresh Assignees** | Fetches all assignable users from Jira and caches them to `assignees.json`. Use the scope selector to fetch from a specific project. |
-| **Refresh Labels** | Fetches the top 40 most-used labels from Jira and caches them to `labels.json`. |
-| **Load Projects** | Loads a dropdown of accessible Jira projects for scope selection. |
+### Refresh Assignees
+
+Fetches assignable users from Jira and caches them to `assignees.json` for use in the Edit step.
+
+**Fetch Scope** — use **Load Projects** to pick a project other than your configured default.
+
+**Filter Options** — narrow the user list before caching:
+
+| Filter | How to use |
+|--------|-----------|
+| **Project Role** | Click **Load Roles** to populate the dropdown, then select a role (e.g. `Developer`, `Viewer`) |
+| **Group / Team** | Click **Load Groups** to populate the dropdown, then select your team's Jira group |
+| **Name / Email Filter** | Type a partial name or email to search within assignable users |
+| **Max Results** | Limit the cache size (10–200, default 50) |
+
+Filters are combined with AND logic. If all filters together return 0 users, the cache is not updated.
+
+### Refresh Labels
+
+Fetches the top 40 most-used labels from Jira and caches them to `labels.json`.
 
 Run **Refresh Assignees** and **Refresh Labels** once after setup, and again whenever your team membership or label set changes.
 
@@ -355,6 +379,15 @@ If you need to set it manually:
 export REQUESTS_CA_BUNDLE=/path/to/your/ca-bundle.crt
 ```
 
+### Secure Credential Storage
+
+JiraMaster uses the OS keyring to store your Jira API token when available:
+- **macOS** — stored in Keychain
+- **Windows** — stored in Credential Manager
+- **Linux** — stored via `keyring` (requires a keyring backend such as `SecretService`)
+
+If no keyring backend is available, the token falls back to plaintext in `config.json`. The Settings page shows which mode is active in the **Security Status** panel.
+
 ### Acceptance Criteria Field
 
 JiraMaster auto-detects your AC custom field. If auto-detection fails:
@@ -382,9 +415,9 @@ Logs are written to `logs/jiramaster.log` (rotating, 5 MB max, 3 backups) and `l
 ```
 JiraMaster/
 ├── app.py                  # Flask app factory, CSRF, blueprint registration
-├── config.py               # Load/save config.json; prompt template management
+├── config.py               # Load/save config.json; prompt template management; keyring integration
 ├── models.py               # Dataclasses: Epic, Story, JiraConfig, UploadResult, Priority
-├── jira_client.py          # All Jira REST API v3 calls (create, transition, comment)
+├── jira_client.py          # All Jira REST API v3 calls (create, transition, comment, groups, roles)
 ├── parser.py               # Parse YAML/JSON LLM output → Epic/Story objects
 ├── prompt_builder.py       # Build tunable prompts (aggressiveness, detail, story count)
 ├── logging_config.py       # Centralised logging (rotating file + console)
@@ -396,25 +429,32 @@ JiraMaster/
 │   ├── import_view.py      # /import — paste/upload and parse LLM output
 │   ├── edit.py             # /edit — edit all epic/story fields
 │   ├── upload.py           # /upload — preview and push to Jira
-│   ├── settings.py         # /settings — Jira credentials and field config
-│   └── tools.py            # /tools — refresh assignees/labels, fetch projects
+│   ├── settings.py         # /settings — Jira credentials, field config, security status
+│   └── tools.py            # /tools — refresh assignees/labels, fetch projects/roles/groups
 │
 ├── templates/              # Jinja2 templates (one subdirectory per blueprint)
 ├── static/
 │   ├── style.css           # Bootstrap 5.3 overrides
 │   └── app.js              # Clipboard copy, story toggles, cascade checkbox logic
 │
-├── docs/
-│   └── images/             # Architecture diagrams and app screenshots
-│
 ├── scripts/
 │   ├── start.sh            # Launch script: macOS/Linux
 │   ├── start.ps1           # Launch script: Windows
 │   ├── start.bat           # Windows batch wrapper
-│   ├── update.ps1          # Windows updater
+│   ├── update.ps1          # Windows updater (git pull + restart)
 │   └── update.bat          # Windows update batch wrapper
+│
 ├── data/
 │   └── prompt_template.txt # Default LLM prompt template
+│
+├── docs/
+│   └── images/             # Architecture diagrams and app screenshots
+│
+├── .claude/
+│   ├── hooks/              # Auto-commit and major-release confirmation hooks
+│   ├── rules/              # Enforced development rules (loaded by Claude Code)
+│   └── settings.json       # Project permissions and hook wiring
+│
 ├── requirements.txt        # Python dependencies
 └── VERSION                 # Current version string
 ```
@@ -447,12 +487,21 @@ Your network may use TLS inspection. The start scripts handle this automatically
 The acceptance criteria field ID may be wrong or missing. Go to **Settings → Detect Fields** to auto-detect it. If detection fails, find the field ID in Jira's issue create screen source and enter it manually.
 
 ### No assignees in autocomplete
-Go to **Jira Tools → Refresh Assignees**. If the list is empty, ensure your API token has permission to browse users in the target project.
+Go to **Jira Tools → Refresh Assignees**. If the list is empty after refresh:
+- Ensure your API token has permission to browse users in the target project
+- Try using the **Group / Team** filter to fetch a specific group instead of all assignable users
+- Try the **Project Role** filter to narrow the pool
+
+### Load Groups / Load Roles returns nothing
+Your Jira account may not have permission to list groups or roles. Check with your Jira administrator. The Name / Email filter can be used as an alternative to fetch users by partial name.
 
 ### Parse errors on import
 - Ensure your LLM output starts with `epics:` (YAML) or `{"epics":` (JSON)
 - Strip any preamble text before pasting — the LLM sometimes adds "Here is the YAML:" before the content
 - Try **Detail Level: Standard** in Step 1 if the LLM keeps adding extra fields
+
+### Keyring not available
+On Linux, `keyring` requires a backend (e.g. `gnome-keyring`, `kwallet`, or `pass`). If none is installed, credentials fall back to `config.json` automatically — no action needed. The Settings page shows current credential storage mode.
 
 ---
 
