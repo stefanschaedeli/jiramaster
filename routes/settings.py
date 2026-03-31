@@ -38,6 +38,7 @@ def save():
         project_key=request.form.get("project_key", "").strip().upper(),
         ac_field_id=request.form.get("ac_field_id", existing.ac_field_id).strip(),
         proxy_url=proxy_url,
+        org_id=request.form.get("org_id", "").strip(),
         labels=labels,
     )
     save_config(cfg)
@@ -81,6 +82,7 @@ def test_connection():
         api_token=request.form.get("api_token", "").strip(),
         project_key=request.form.get("project_key", "").strip().upper(),
         proxy_url=proxy_url,
+        org_id=request.form.get("org_id", "").strip(),
     )
     client = JiraClient(cfg)
     ok, msg = client.test_connection()

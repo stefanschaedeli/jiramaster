@@ -67,6 +67,19 @@
             </div>
           </div>
 
+          <div class="mb-3">
+            <label for="org_id" class="form-label fw-semibold">
+              Atlassian Org ID <span class="text-muted fw-normal">(optional)</span>
+            </label>
+            <input type="text" name="org_id" id="org_id" class="form-control"
+                   value="{{ cfg.org_id }}" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                   style="width:360px" maxlength="64">
+            <div class="form-text">
+              Required for the Atlassian Teams filter. Find it in
+              <strong>admin.atlassian.com → Settings → Organization</strong> — the UUID in the URL.
+            </div>
+          </div>
+
           <div class="mb-4">
             <label class="form-label fw-semibold">
               Labels <span class="text-muted fw-normal">(optional)</span>
@@ -109,6 +122,7 @@
           <input type="hidden" name="api_token" id="test_api_token">
           <input type="hidden" name="project_key" id="test_project_key">
           <input type="hidden" name="proxy_url" id="test_proxy_url">
+          <input type="hidden" name="org_id" id="test_org_id">
         </form>
 
         <!-- Separate form for field detection -->
@@ -254,6 +268,7 @@ document.getElementById('testForm').addEventListener('submit', function() {
   document.getElementById('test_api_token').value = document.getElementById('api_token').value;
   document.getElementById('test_project_key').value = document.getElementById('project_key').value;
   document.getElementById('test_proxy_url').value = document.getElementById('proxy_url').value;
+  document.getElementById('test_org_id').value = document.getElementById('org_id').value;
 });
 </script>
 {% endblock %}
