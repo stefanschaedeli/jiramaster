@@ -127,20 +127,24 @@ class JiraClient:
             log.error("detect_ac_field exception: %s", exc)
             return None, str(exc)
 
-    def fetch_assignees(self, max_results: int = 20, project_key: Optional[str] = None) -> Tuple[List[dict], Optional[str]]:
+    def fetch_assignees(self, max_results: int = 50, project_key: Optional[str] = None, query: Optional[str] = None) -> Tuple[List[dict], Optional[str]]:
         """Fetch top assignable users for the project.
 
         Args:
-            max_results: Maximum number of users to return.
+            max_results: Maximum number of users to return (default 50).
             project_key: Override the configured project key. Falls back to self.project_key.
+            query: Optional text search against displayName/emailAddress (passed to Jira API).
 
         Returns (users, error_message). users is [] on failure.
         """
         effective_project = project_key or self.project_key
+        params: dict = {"project": effective_project, "maxResults": max_results}
+        if query:
+            params["query"] = query
         try:
             resp = self.session.get(
                 self._url("user/assignable/search"),
-                params={"project": effective_project, "maxResults": max_results},
+                params=params,
                 timeout=10,
             )
             if resp.status_code != 200:
@@ -154,9 +158,106 @@ class JiraClient:
                 for u in resp.json()
                 if not u.get("accountType", "").startswith("app")
             ]
+            log.info("fetch_assignees: %d users (project=%s, query=%r)", len(users), effective_project, query)
             return users[:max_results], None
         except requests.RequestException as exc:
             log.error("fetch_assignees exception: %s", exc)
+            return [], str(exc)
+
+    def fetch_project_roles(self, project_key: Optional[str] = None) -> Tuple[List[dict], Optional[str]]:
+        """Fetch all roles for a project via GET /project/{key}/role.
+
+        Returns (roles, error_message). roles is a list of {id: int, name: str}.
+        """
+        effective_project = project_key or self.project_key
+        try:
+            resp = self.session.get(
+                self._url(f"project/{effective_project}/role"),
+                timeout=10,
+            )
+            if resp.status_code != 200:
+                return [], self._log_error("fetch_project_roles", resp)
+            data = resp.json()
+            # Response is a dict of {roleName: roleUrl}; extract id from URL
+            roles = []
+            for name, url in data.items():
+                # URL format: .../project/{key}/role/{id}
+                try:
+                    role_id = int(url.rstrip("/").split("/")[-1])
+                    roles.append({"id": role_id, "name": name})
+                except (ValueError, IndexError):
+                    log.warning("fetch_project_roles: could not parse role id from %r", url)
+            roles.sort(key=lambda r: r["name"])
+            log.info("fetch_project_roles: %d roles for project %s", len(roles), effective_project)
+            return roles, None
+        except requests.RequestException as exc:
+            log.error("fetch_project_roles exception: %s", exc)
+            return [], str(exc)
+
+    def fetch_role_members(self, role_id: int, project_key: Optional[str] = None) -> Tuple[List[str], Optional[str]]:
+        """Fetch accountIds of all members in a project role.
+
+        GET /project/{key}/role/{id} returns actors; extracts accountId for each user actor.
+        Returns (account_ids, error_message). account_ids is [] on failure.
+        """
+        effective_project = project_key or self.project_key
+        try:
+            resp = self.session.get(
+                self._url(f"project/{effective_project}/role/{role_id}"),
+                timeout=10,
+            )
+            if resp.status_code != 200:
+                return [], self._log_error("fetch_role_members", resp)
+            actors = resp.json().get("actors", [])
+            account_ids = [
+                a["actorUser"]["accountId"]
+                for a in actors
+                if a.get("type") == "atlassian-user-role-actor" and a.get("actorUser", {}).get("accountId")
+            ]
+            log.info("fetch_role_members: role_id=%d → %d members", role_id, len(account_ids))
+            return account_ids, None
+        except requests.RequestException as exc:
+            log.error("fetch_role_members exception: %s", exc)
+            return [], str(exc)
+
+    def fetch_group_members(self, group_name: str, max_results: int = 200) -> Tuple[List[dict], Optional[str]]:
+        """Fetch members of a Jira group via GET /group/member.
+
+        Returns (users, error_message). users is [{accountId, displayName, emailAddress}].
+        Paginates automatically up to max_results total members.
+        """
+        try:
+            users: List[dict] = []
+            start_at = 0
+            while True:
+                resp = self.session.get(
+                    self._url("group/member"),
+                    params={
+                        "groupname": group_name,
+                        "startAt": start_at,
+                        "maxResults": min(50, max_results - len(users)),
+                        "includeInactiveUsers": False,
+                    },
+                    timeout=10,
+                )
+                if resp.status_code != 200:
+                    return [], self._log_error("fetch_group_members", resp)
+                data = resp.json()
+                page = data.get("values", [])
+                for u in page:
+                    if not u.get("accountType", "").startswith("app"):
+                        users.append({
+                            "accountId": u["accountId"],
+                            "displayName": u.get("displayName", ""),
+                            "emailAddress": u.get("emailAddress", ""),
+                        })
+                if not page or data.get("isLast", True) or len(users) >= max_results:
+                    break
+                start_at += len(page)
+            log.info("fetch_group_members: group=%r → %d members", group_name, len(users))
+            return users[:max_results], None
+        except requests.RequestException as exc:
+            log.error("fetch_group_members exception: %s", exc)
             return [], str(exc)
 
     def fetch_projects(self) -> Tuple[List[dict], Optional[str]]:
