@@ -97,6 +97,61 @@ def save_config(cfg: JiraConfig) -> None:
     log.warning("Credentials stored in plaintext config.json (keyring unavailable)")
 
 
+def get_security_status() -> dict:
+    """Return a snapshot of the current security posture for display in the UI."""
+    import os
+
+    # Credential storage
+    keyring_ok = False
+    keyring_error = None
+    if _KEYRING_AVAILABLE:
+        try:
+            # A lightweight probe — just check we can call get_password without error
+            keyring.get_password(KEYRING_SERVICE, "__probe__")
+            keyring_ok = True
+        except Exception as e:
+            keyring_error = str(e)
+
+    # Check whether credentials are actually in the keyring vs config.json
+    creds_in_keyring = False
+    if keyring_ok:
+        try:
+            token = keyring.get_password(KEYRING_SERVICE, KEYRING_TOKEN_KEY)
+            creds_in_keyring = bool(token)
+        except Exception:
+            pass
+
+    # SSL / CA bundle
+    ca_bundle = None
+    ca_source = "certifi default"
+    for var in ("REQUESTS_CA_BUNDLE", "SSL_CERT_FILE"):
+        path = os.environ.get(var)
+        if path and os.path.isfile(path):
+            ca_bundle = path
+            ca_source = f"{var} ({path})"
+            break
+    if ca_bundle is None:
+        try:
+            import certifi
+            ca_bundle = certifi.where()
+        except Exception:
+            ca_bundle = None
+
+    # API token loaded (from either source)
+    cfg = load_config()
+    api_token_loaded = bool(cfg.api_token)
+
+    return {
+        "keyring_available": _KEYRING_AVAILABLE,
+        "keyring_functional": keyring_ok,
+        "keyring_error": keyring_error,
+        "creds_in_keyring": creds_in_keyring,
+        "api_token_loaded": api_token_loaded,
+        "ssl_ca_source": ca_source,
+        "ssl_ca_bundle": ca_bundle,
+    }
+
+
 def load_prompt_template() -> str:
     if PROMPT_TEMPLATE_FILE.exists():
         return PROMPT_TEMPLATE_FILE.read_text(encoding="utf-8")

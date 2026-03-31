@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for
 
-from config import load_config, save_config
+from config import load_config, save_config, get_security_status
 from models import JiraConfig
 from jira_client import JiraClient
 from assignees import load_assignees
@@ -14,8 +14,9 @@ def index():
     cfg = load_config()
     assignees = load_assignees()
     label_cache = load_label_cache()
+    security = get_security_status()
     return render_template("settings/index.html", cfg=cfg, assignees=assignees,
-                           label_cache=label_cache)
+                           label_cache=label_cache, security=security)
 
 
 @bp.route("/save", methods=["POST"])
@@ -64,12 +65,16 @@ def test_connection():
     if base_url and not base_url.startswith("https://"):
         flash("Jira Base URL must start with https://", "danger")
         cfg = JiraConfig()
-        return render_template("settings/index.html", cfg=cfg)
+        return render_template("settings/index.html", cfg=cfg,
+                               assignees=load_assignees(), label_cache=load_label_cache(),
+                               security=get_security_status())
     proxy_url = request.form.get("proxy_url", "").strip()
     if proxy_url and not (proxy_url.startswith("http://") or proxy_url.startswith("https://")):
         flash("Proxy URL must start with http:// or https://", "danger")
         cfg = JiraConfig()
-        return render_template("settings/index.html", cfg=cfg)
+        return render_template("settings/index.html", cfg=cfg,
+                               assignees=load_assignees(), label_cache=load_label_cache(),
+                               security=get_security_status())
     cfg = JiraConfig(
         base_url=base_url,
         username=request.form.get("username", "").strip(),
@@ -84,4 +89,5 @@ def test_connection():
     else:
         flash(f"Connection failed: {msg}", "danger")
     return render_template("settings/index.html", cfg=cfg,
-                           assignees=load_assignees(), label_cache=load_label_cache())
+                           assignees=load_assignees(), label_cache=load_label_cache(),
+                           security=get_security_status())

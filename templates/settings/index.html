@@ -3,7 +3,7 @@
 
 {% block content %}
 <h2 class="mb-1">Settings</h2>
-<p class="text-muted mb-4">Configure your Jira Cloud connection. Credentials are stored locally in <code>config.json</code>.</p>
+<p class="text-muted mb-4">Configure your Jira Cloud connection. Credentials are stored in the OS keyring when available, otherwise in <code>config.json</code>.</p>
 
 <div class="row">
   <div class="col-lg-7">
@@ -169,14 +169,56 @@
               {% endif %}
             </div>
           </div>
-        {% else %}
-          <div class="d-flex align-items-center gap-2 text-warning">
-            <span class="fs-4">⚠</span>
-            <div>
-              <div class="fw-semibold">Not configured</div>
-              <div class="small text-muted">Fill in the form above to connect to Jira.</div>
+        {% endif %}
+
+        {# Security status — shown regardless of whether Jira is configured #}
+        {% if security is defined %}
+        <hr class="my-3">
+        <div class="fw-semibold small text-uppercase text-muted mb-2" style="letter-spacing:.05em;">Security</div>
+
+        {# API token #}
+        <div class="d-flex align-items-start gap-2 mt-2 {% if security.api_token_loaded %}text-success{% else %}text-warning{% endif %}">
+          <span class="fs-5 mt-1">{% if security.api_token_loaded %}✓{% else %}⚠{% endif %}</span>
+          <div>
+            <div class="fw-semibold small">API Token</div>
+            <div class="small text-muted">
+              {% if security.api_token_loaded %}Loaded{% else %}Not set — save your credentials above{% endif %}
             </div>
           </div>
+        </div>
+
+        {# Credential storage location #}
+        <div class="d-flex align-items-start gap-2 mt-2 {% if security.creds_in_keyring %}text-success{% elif security.keyring_functional %}text-muted{% else %}text-warning{% endif %}">
+          <span class="fs-5 mt-1">
+            {% if security.creds_in_keyring %}✓{% elif security.keyring_functional %}–{% else %}⚠{% endif %}
+          </span>
+          <div>
+            <div class="fw-semibold small">Credential Storage</div>
+            <div class="small text-muted">
+              {% if security.creds_in_keyring %}
+                Stored in OS keyring (secure)
+              {% elif security.keyring_functional %}
+                Keyring available but no credentials saved yet — save settings to store securely
+              {% elif security.keyring_available %}
+                Keyring present but not functional — stored in <code>config.json</code> (plaintext)
+                {% if security.keyring_error %}<br><span class="text-danger">{{ security.keyring_error }}</span>{% endif %}
+              {% else %}
+                Keyring not available — stored in <code>config.json</code> (plaintext)
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        {# SSL #}
+        <div class="d-flex align-items-start gap-2 mt-2 text-success">
+          <span class="fs-5 mt-1">✓</span>
+          <div>
+            <div class="fw-semibold small">SSL / TLS</div>
+            <div class="small text-muted">
+              Enabled — {{ security.ssl_ca_source }}
+            </div>
+          </div>
+        </div>
         {% endif %}
       </div>
     </div>
@@ -193,8 +235,9 @@
           <li>Copy the token and paste it above</li>
         </ol>
         <p class="text-muted mb-0">
-          The token is stored in <code>config.json</code> in the project directory.
-          This file is gitignored and never committed.
+          The token is stored in the OS keyring when available (macOS Keychain, Windows Credential Manager, etc.),
+          otherwise in <code>config.json</code> in the project directory.
+          That file is gitignored and never committed. See the <strong>Security</strong> section in Status for the current mode.
         </p>
       </div>
     </div>
