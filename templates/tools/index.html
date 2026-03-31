@@ -20,9 +20,9 @@
           {% endif %}
         </div>
 
-        <form method="POST" action="{{ url_for('tools.refresh_assignees') }}" id="refresh-assignees-form">
+        <form method="POST" action="{{ url_for('tools.refresh_assignees') }}" id="refresh-assignees-form" class="flex-grow-1 d-flex flex-column">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="hidden" name="project_scope" id="project-scope-hidden" value="">
+          <input type="hidden" name="project_scope" id="project-scope-hidden" value="{{ cfg.project_key if cfg else '' }}">
 
           <!-- Project scope -->
           <div class="mb-3">
@@ -195,11 +195,10 @@
         return r.json();
       })
       .then(function (roles) {
-        roleSelect.innerHTML = '<option value="">— no role filter —</option>';
         if (roles.length === 0) {
-          rolesErrorDiv.textContent = 'No roles found for this project.';
-          rolesErrorDiv.style.display = 'block';
+          roleSelect.innerHTML = '<option value="">— no roles in this project —</option>';
         } else {
+          roleSelect.innerHTML = '<option value="">— no role filter —</option>';
           roles.forEach(function (role) {
             const opt = document.createElement('option');
             opt.value = role.id;
