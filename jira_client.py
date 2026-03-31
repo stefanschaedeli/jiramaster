@@ -84,6 +84,8 @@ class JiraClient:
         self.session = requests.Session()
         self.session.auth = HTTPBasicAuth(cfg.username, cfg.api_token)
         self.session.headers.update({"Accept": "application/json", "Content-Type": "application/json"})
+        # Prevent urllib3 from logging Authorization headers at DEBUG level
+        logging.getLogger("urllib3").setLevel(logging.WARNING)
         self.session.verify = _CA_BUNDLE
         if cfg.proxy_url:
             self.session.proxies = {"http": cfg.proxy_url, "https": cfg.proxy_url}
@@ -92,7 +94,7 @@ class JiraClient:
         return f"{self.api_base}/{path.lstrip('/')}"
 
     def _log_error(self, label: str, resp: requests.Response) -> str:
-        """Log full response details to terminal and return a UI-safe summary."""
+        """Log full response details to file and return a UI-safe summary."""
         try:
             body = resp.json()
             pretty = json.dumps(body, indent=2)
@@ -100,11 +102,18 @@ class JiraClient:
             body = {}
             pretty = resp.text
         log.error("%s — HTTP %s\n%s", label, resp.status_code, pretty)
-        # Extract Jira's human-readable error messages
+        # Return generic messages for common auth/permission errors
+        if resp.status_code == 401:
+            return "HTTP 401 — Authentication failed. Check your API token."
+        if resp.status_code == 403:
+            return "HTTP 403 — Permission denied. Check your project access."
+        if resp.status_code == 404:
+            return "HTTP 404 — Resource not found. Check your Jira URL and project key."
+        # For other errors, return Jira's structured error fields (field-level validation feedback)
         messages = body.get("errorMessages", [])
         errors = body.get("errors", {})
         parts = list(messages) + [f"{k}: {v}" for k, v in errors.items()]
-        detail = "; ".join(parts) if parts else resp.text[:300] or "no detail"
+        detail = "; ".join(parts) if parts else "See logs for details"
         return f"HTTP {resp.status_code} — {detail}"
 
     def detect_ac_field(self) -> Tuple[Optional[str], Optional[str]]:

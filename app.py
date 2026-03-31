@@ -7,7 +7,7 @@ from pathlib import Path
 from logging_config import setup_logging
 setup_logging()
 
-from flask import Flask, session
+from flask import Flask, render_template, session
 from flask_wtf.csrf import CSRFProtect
 
 log = logging.getLogger(__name__)
@@ -39,6 +39,29 @@ app.config["SESSION_COOKIE_SECURE"] = os.environ.get("HTTPS", "") == "1"  # only
 @app.before_request
 def _make_session_permanent():
     session.permanent = True
+
+
+@app.after_request
+def _set_security_headers(response):
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "img-src 'self' data:; "
+        "font-src 'self'; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'"
+    )
+    return response
+
+
+@app.errorhandler(500)
+def _handle_500(error):
+    log.exception("Internal server error: %s", error)
+    return render_template("error.html", code=500,
+                           message="Internal server error. Check logs for details."), 500
 
 
 # Ensure .work directory exists; clean up stale files from previous runs

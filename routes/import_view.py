@@ -1,4 +1,5 @@
 import uuid
+from pathlib import Path
 
 from flask import Blueprint, render_template, request, flash, redirect, url_for, session
 
@@ -7,6 +8,8 @@ from config import load_config
 from work_store import load_epics, save_epics, set_session_work_id, get_session_work_id
 
 bp = Blueprint("import_view", __name__, url_prefix="/import")
+
+_ALLOWED_UPLOAD_EXTENSIONS = {".yaml", ".yml", ".json", ".txt"}
 
 
 @bp.route("/", methods=["GET"])
@@ -20,6 +23,10 @@ def parse():
     # File upload takes priority over textarea
     if "copilot_file" in request.files and request.files["copilot_file"].filename:
         f = request.files["copilot_file"]
+        ext = Path(f.filename).suffix.lower()
+        if ext not in _ALLOWED_UPLOAD_EXTENSIONS:
+            flash("Invalid file type. Allowed: .yaml, .yml, .json, .txt", "danger")
+            return redirect(url_for("import_view.index"))
         text = f.read().decode("utf-8", errors="replace")
     else:
         text = request.form.get("copilot_output", "").strip()
