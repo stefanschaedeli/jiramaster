@@ -32,6 +32,11 @@
                 <option value="{{ cfg.project_key if cfg else '' }}" selected>
                   {{ cfg.project_key if cfg else '(not configured)' }} — configured default
                 </option>
+                {% for p in projects_cache %}
+                  {% if p.key != (cfg.project_key if cfg else '') %}
+                    <option value="{{ p.key }}">{{ p.key }} — {{ p.name }}</option>
+                  {% endif %}
+                {% endfor %}
               </select>
               <button type="button" id="load-projects-btn" class="btn btn-sm btn-outline-secondary text-nowrap">
                 Load Projects
@@ -72,6 +77,27 @@
                     </button>
                   </div>
                   <div id="groups-load-error" class="text-danger small mt-1" style="display:none;"></div>
+                </div>
+
+                <!-- Atlassian Team filter -->
+                <div class="mb-2">
+                  <label class="form-label small fw-semibold mb-1">Atlassian Team</label>
+                  {% if cfg and cfg.org_id %}
+                  <div class="d-flex gap-2">
+                    <select name="filter_team_id" id="team-select" class="form-select form-select-sm">
+                      <option value="">— no team filter —</option>
+                    </select>
+                    <button type="button" id="load-teams-btn" class="btn btn-sm btn-outline-secondary text-nowrap">
+                      Load Teams
+                    </button>
+                  </div>
+                  <div id="teams-load-error" class="text-danger small mt-1" style="display:none;"></div>
+                  {% else %}
+                  <div class="text-muted small">
+                    Requires <a href="{{ url_for('settings.index') }}">Atlassian Org ID</a> in Settings.
+                  </div>
+                  <input type="hidden" name="filter_team_id" value="">
+                  {% endif %}
                 </div>
 
                 <!-- Name/email query -->
@@ -263,6 +289,50 @@
       })
       .finally(function () { loadGroupsBtn.disabled = false; });
   });
+
+  {% if cfg and cfg.org_id %}
+  const teamSelect = document.getElementById('team-select');
+  const loadTeamsBtn = document.getElementById('load-teams-btn');
+  const teamsErrorDiv = document.getElementById('teams-load-error');
+
+  loadTeamsBtn.addEventListener('click', function () {
+    loadTeamsBtn.disabled = true;
+    loadTeamsBtn.textContent = 'Loading\u2026';
+    teamsErrorDiv.style.display = 'none';
+
+    const body = new FormData();
+
+    fetch('{{ url_for("tools.fetch_teams") }}', {
+      method: 'POST',
+      headers: { 'X-CSRFToken': csrfToken },
+      body: body,
+    })
+      .then(function (r) {
+        if (!r.ok) return r.json().then(function (d) { throw new Error(d.error || r.statusText); });
+        return r.json();
+      })
+      .then(function (teams) {
+        if (teams.length === 0) {
+          teamSelect.innerHTML = '<option value="">— no teams found —</option>';
+        } else {
+          teamSelect.innerHTML = '<option value="">— no team filter —</option>';
+          teams.forEach(function (t) {
+            const opt = document.createElement('option');
+            opt.value = t.teamId;
+            opt.textContent = t.displayName;
+            teamSelect.appendChild(opt);
+          });
+        }
+        loadTeamsBtn.textContent = 'Reload Teams';
+      })
+      .catch(function (err) {
+        teamsErrorDiv.textContent = 'Failed to load teams: ' + err.message;
+        teamsErrorDiv.style.display = 'block';
+        loadTeamsBtn.textContent = 'Load Teams';
+      })
+      .finally(function () { loadTeamsBtn.disabled = false; });
+  });
+  {% endif %}
 })();
 </script>
 {% endblock %}
