@@ -41,7 +41,7 @@ JiraMaster solves a common pain point: after a meeting, you have Copilot or Chat
 3. **Edit** every field — titles, acceptance criteria, assignees, labels, priorities, due dates
 4. **Upload** directly to Jira Cloud via REST API v3
 
-No database. No migrations. Works out of the box with `./start.sh`.
+No database. No migrations. Works out of the box with `./scripts/start.sh`.
 
 ---
 
@@ -56,14 +56,14 @@ No database. No migrations. Works out of the box with `./start.sh`.
 | **Core Modules** | `parser.py`, `prompt_builder.py`, `jira_client.py`, `config.py`, `models.py`, `logging_config.py` |
 | **File Storage** | `.work/{uuid}.json` per session, `config.json`, `assignees.json`, `labels.json` — no database |
 | **External** | Jira Cloud (REST API v3), and your LLM of choice (manual copy/paste) |
-| **Launch Scripts** | `start.sh` (macOS/Linux) and `start.ps1` (Windows) — manage venv, deps, TLS cert merging |
+| **Launch Scripts** | `scripts/start.sh` (macOS/Linux) and `scripts/start.ps1` (Windows) — manage venv, deps, TLS cert merging |
 
 ### Key Design Decisions
 
 - **No database** — each session is a UUID-keyed JSON file in `.work/`. Zero migrations, trivially portable.
 - **Include flags** — `Epic.include` and `Story.include` booleans let you exclude any item before upload.
 - **ADF dual-mode** — acceptance criteria are written in Atlassian Document Format (ADF); falls back to plain text if the field doesn't support ADF.
-- **TLS proxy support** — `start.sh`/`start.ps1` merge your system CA certificates into the certifi bundle automatically, so corporate TLS-inspection proxies work without admin rights.
+- **TLS proxy support** — `scripts/start.sh`/`scripts/start.ps1` merge your system CA certificates into the certifi bundle automatically, so corporate TLS-inspection proxies work without admin rights.
 - **Centralised logging** — all modules use `logging.getLogger(__name__)`; a single `setup_logging()` call in `app.py` routes everything to a rotating file log and console.
 
 ---
@@ -121,10 +121,10 @@ Meeting Notes (optional)
 ```bash
 git clone https://github.com/your-username/JiraMaster.git
 cd JiraMaster
-./start.sh
+./scripts/start.sh
 ```
 
-`start.sh` will:
+`scripts/start.sh` will:
 1. Create a Python virtual environment (`venv/`)
 2. Install all dependencies from `requirements.txt`
 3. Merge system CA certificates into the certifi bundle (for TLS-inspection proxies)
@@ -135,12 +135,12 @@ cd JiraMaster
 ```bat
 git clone https://github.com/your-username/JiraMaster.git
 cd JiraMaster
-start.bat
+scripts\start.bat
 ```
 
-`start.bat` launches `start.ps1` with `-ExecutionPolicy Bypass`, so it works on corporate machines without admin rights or policy changes. CA certs are merged from `Cert:\CurrentUser\Root`, `Cert:\LocalMachine\Root`, and `Cert:\LocalMachine\CA`.
+`scripts/start.bat` launches `scripts/start.ps1` with `-ExecutionPolicy Bypass`, so it works on corporate machines without admin rights or policy changes. CA certs are merged from `Cert:\CurrentUser\Root`, `Cert:\LocalMachine\Root`, and `Cert:\LocalMachine\CA`.
 
-> **Advanced:** If you have already configured your own PowerShell execution policy, you can run `.\start.ps1` directly instead.
+> **Advanced:** If you have already configured your own PowerShell execution policy, you can run `.\scripts\start.ps1` directly instead.
 
 ### Manual Installation
 
@@ -332,7 +332,7 @@ Run **Refresh Assignees** and **Refresh Labels** once after setup, and again whe
 ### Debug Mode
 
 ```bash
-FLASK_DEBUG=1 ./start.sh
+FLASK_DEBUG=1 ./scripts/start.sh
 ```
 
 Enables:
@@ -341,7 +341,7 @@ Enables:
 
 Windows:
 ```powershell
-$env:FLASK_DEBUG="1"; .\start.ps1
+$env:FLASK_DEBUG="1"; .\scripts\start.ps1
 ```
 
 ### Corporate TLS Proxy
@@ -407,8 +407,14 @@ JiraMaster/
 ├── docs/
 │   └── images/             # Architecture diagrams and app screenshots
 │
-├── start.sh                # Launch script: macOS/Linux
-├── start.ps1               # Launch script: Windows
+├── scripts/
+│   ├── start.sh            # Launch script: macOS/Linux
+│   ├── start.ps1           # Launch script: Windows
+│   ├── start.bat           # Windows batch wrapper
+│   ├── update.ps1          # Windows updater
+│   └── update.bat          # Windows update batch wrapper
+├── data/
+│   └── prompt_template.txt # Default LLM prompt template
 ├── requirements.txt        # Python dependencies
 └── VERSION                 # Current version string
 ```
@@ -434,7 +440,7 @@ Go to **Settings** and enter your Jira URL, email, API token, and project key. C
 
 ### SSL / Certificate errors
 Your network may use TLS inspection. The start scripts handle this automatically, but if you see `SSL: CERTIFICATE_VERIFY_FAILED`:
-1. Re-run `./start.sh` — it merges system CA certs on every start
+1. Re-run `./scripts/start.sh` — it merges system CA certs on every start
 2. Or set `REQUESTS_CA_BUNDLE=/path/to/bundle.crt` manually before running
 
 ### "Field not found" / AC not posting

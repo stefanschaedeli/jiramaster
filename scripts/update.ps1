@@ -1,5 +1,5 @@
 $ErrorActionPreference = "Stop"
-Set-Location $PSScriptRoot
+Set-Location (Split-Path $PSScriptRoot -Parent)
 
 # Ensure logs directory exists
 if (-not (Test-Path "logs")) { New-Item -ItemType Directory -Path "logs" | Out-Null }

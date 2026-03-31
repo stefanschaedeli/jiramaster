@@ -18,7 +18,7 @@ KEYRING_TOKEN_KEY = "api_token"
 log = logging.getLogger(__name__)
 
 CONFIG_FILE = Path(__file__).parent / "config.json"
-PROMPT_TEMPLATE_FILE = Path(__file__).parent / "prompt_template.txt"
+PROMPT_TEMPLATE_FILE = Path(__file__).parent / "data" / "prompt_template.txt"
 
 DEFAULT_PROMPT_TEMPLATE = """\
 IMPORTANT: Your entire response must be a single valid YAML document. Do not write any text before or after the YAML. Do not use markdown code fences (no ```). Do not explain anything. Do not add headers, bullet points, or prose. Output ONLY the raw YAML starting with "epics:".

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 # Ensure logs directory exists and tee all output there
 mkdir -p logs

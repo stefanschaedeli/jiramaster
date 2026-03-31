@@ -33,29 +33,47 @@ logging_config.py    Centralised logging setup (file + console, rotation)
 assignees.py         Load/save assignees.json cache from Jira
 labels.py            Load/save labels.json cache from Jira
 
-routes/
+routes/              Flask blueprints — see routes/AGENTS.md for conventions
   __init__.py        Blueprint registration, UUID validation helper
   prompt.py          /prompt — generate/download prompt
   import_view.py     /import — paste/upload and parse LLM output
   edit.py            /edit — edit all epic/story fields
   upload.py          /upload — preview and push to Jira
   settings.py        /settings — Jira credentials and field configuration
+  tools.py           /tools — Jira utility tools (refresh assignees, labels)
 
-templates/           Jinja2 templates organized by blueprint
+templates/           Jinja2 templates organized by blueprint — see templates/AGENTS.md
 static/
-  style.css          Bootstrap overrides (~58 lines)
+  style.css          Bootstrap overrides
   app.js             Clipboard copy, story toggles, cascade checkbox logic
+
+scripts/             Launch and update scripts for all platforms
+  start.sh           macOS/Linux: venv, deps, CA certs, startup log
+  start.ps1          Windows PowerShell: equivalent of start.sh
+  start.bat          Windows: batch wrapper for start.ps1
+  update.ps1         Windows: git pull + restart
+  update.bat         Windows: batch wrapper for update.ps1
+
+data/                Non-code assets
+  prompt_template.txt  Default LLM prompt template
+
+docs/                Documentation, diagrams, screenshots
+  images/            Architecture and UI screenshots
+  superpowers/       AI-assisted planning documents
+
+.claude/             Claude Code configuration
+  hooks/             Auto-commit and major-release confirmation hooks
+  rules/             Enforced development rules (loaded automatically by Claude Code)
+  settings.json      Project permissions and hook wiring
 
 .work/               Runtime JSON storage for in-progress work (gitignored)
 logs/                Runtime logs: jiramaster.log + startup.log (gitignored)
-start.sh             Launch script (macOS): venv, deps, CA certs, startup log
-start.ps1            Launch script (Windows): same as start.sh, no admin needed
 ```
 
 ## How to Run
 
 ```bash
-./start.sh
+./scripts/start.sh
 ```
 
 Opens at **http://127.0.0.1:5000**. Requires Python 3.
@@ -87,27 +105,13 @@ Opens at **http://127.0.0.1:5000**. Requires Python 3.
 
 ## Logging Convention
 
-**All logging is centralised in `logging_config.py`.** Every module must follow this pattern:
-
+All logging is centralised in `logging_config.py`. Every module must use:
 ```python
 import logging
 log = logging.getLogger(__name__)
 ```
 
-Rules:
-- **NEVER** call `logging.basicConfig()` in any module — `setup_logging()` in `app.py` handles it
-- **NEVER** use `print()` for diagnostic output — use `log.info()`, `log.warning()`, `log.error()`, or `log.debug()`
-- Use `log.exception()` inside `except` blocks to capture stack traces
-- Log at appropriate levels:
-  - `DEBUG` — detailed diagnostics (API payloads, field values, flow tracing)
-  - `INFO` — key operations (startup, config loaded, issue created, connection tested)
-  - `WARNING` — recoverable problems (missing field, fallback used, feature skipped)
-  - `ERROR` — failures (API errors, parse failures, file I/O errors)
-
-Log output:
-- **Console**: INFO by default, DEBUG when `FLASK_DEBUG=1`
-- **File**: `logs/jiramaster.log` — always DEBUG level, rotated at 5 MB, keeps 3 backups
-- **Startup**: `logs/startup.log` — captured by `start.sh` / `start.ps1` (venv, pip, cert merging)
+See `.claude/rules/02-no-print-or-basicconfig.md` and `.claude/rules/04-logging-conventions.md` for full details.
 
 ## Known Technical Debt
 
@@ -119,16 +123,17 @@ Log output:
 ## Development Notes
 
 - All Jira API calls go through `JiraClient` in `jira_client.py`
-- Run the app with `FLASK_DEBUG=1 ./start.sh` for debug mode (enables DEBUG console output)
-- On Windows: `$env:FLASK_DEBUG="1"; .\start.ps1`
+- Run the app with `FLASK_DEBUG=1 ./scripts/start.sh` for debug mode (enables DEBUG console output)
+- On Windows: `$env:FLASK_DEBUG="1"; .\scripts\start.ps1`
 - The `.work/` directory accumulates files — there is no automatic cleanup
-- `assignees.json` and `labels.json` are refreshed from Settings → "Refresh" buttons
-- SSL: `start.sh` (macOS) and `start.ps1` (Windows) merge system CA certs into certifi bundle; `jira_client.py` auto-detects via `REQUESTS_CA_BUNDLE` env var
+- `assignees.json` and `labels.json` are refreshed from Tools → "Refresh" buttons
+- SSL: `scripts/start.sh` (macOS) and `scripts/start.ps1` (Windows) merge system CA certs into certifi bundle; `jira_client.py` auto-detects via `REQUESTS_CA_BUNDLE` env var
 
-## Critical Rules
+## Rules
 
-- **NEVER** commit `config.json`, `.secret_key`, or any credentials
-- **NEVER** hardcode tokens in `.mcp.json` — always use `${ENV_VAR}` substitution
-- **NEVER** use `print()` or `logging.basicConfig()` — use the centralised logging (see Logging Convention above)
-- All Jira API calls must go through `JiraClient` (never call `requests` directly in routes)
-- Keep `.mcp.json` in `.gitignore`
+See `.claude/rules/` for all enforced development rules:
+- `01-no-credentials-in-git.md` — credential and secret handling
+- `02-no-print-or-basicconfig.md` — centralised logging only
+- `03-jira-api-through-client.md` — all API calls via JiraClient
+- `04-logging-conventions.md` — log levels and output destinations
+- `05-code-organization.md` — project layout and import conventions
