@@ -5,6 +5,7 @@ from config import load_config
 from jira_client import JiraClient
 from assignees import load_assignees, save_assignees
 from labels import load_label_cache, save_label_cache
+from projects import load_projects, save_projects
 
 log = logging.getLogger(__name__)
 
@@ -16,7 +17,14 @@ def index():
     cfg = load_config()
     assignees = load_assignees()
     label_cache = load_label_cache()
-    return render_template("tools/index.html", assignees=assignees, label_cache=label_cache, cfg=cfg)
+    projects_cache = load_projects()
+    return render_template(
+        "tools/index.html",
+        assignees=assignees,
+        label_cache=label_cache,
+        projects_cache=projects_cache,
+        cfg=cfg,
+    )
 
 
 @bp.route("/refresh-assignees", methods=["POST"])
@@ -75,6 +83,18 @@ def refresh_assignees():
             filters_applied = True
             log.info("refresh_assignees: after group filter → %d users", len(users))
 
+    # Step 4: intersect with Atlassian Team members if team selected
+    team_id = request.form.get("filter_team_id", "").strip()
+    if team_id:
+        team_members, team_err = client.fetch_team_members(team_id)
+        if team_err:
+            flash(f"Warning: Could not fetch team members ({team_err}). Team filter skipped.", "warning")
+        else:
+            team_account_ids = {m["accountId"] for m in team_members}
+            users = [u for u in users if u["accountId"] in team_account_ids]
+            filters_applied = True
+            log.info("refresh_assignees: after team filter → %d users", len(users))
+
     # Guard: don't wipe cache if filters were applied but yielded nothing
     if not users and filters_applied:
         flash("All filters combined returned 0 users — cache not updated. Relax your filters and try again.", "warning")
@@ -114,6 +134,22 @@ def fetch_groups():
     return jsonify(groups)
 
 
+@bp.route("/fetch-teams", methods=["POST"])
+def fetch_teams():
+    """Return JSON list of {teamId, displayName} for Atlassian Teams."""
+    cfg = load_config()
+    if not cfg.is_configured():
+        return jsonify({"error": "Jira not configured"}), 400
+    if not cfg.org_id:
+        return jsonify({"error": "Atlassian Org ID not configured — set it in Settings"}), 400
+    query = request.form.get("query", "").strip()
+    client = JiraClient(cfg)
+    teams, err = client.fetch_teams(query=query)
+    if err:
+        return jsonify({"error": err}), 502
+    return jsonify(teams)
+
+
 @bp.route("/fetch-projects", methods=["POST"])
 def fetch_projects():
     """Return JSON list of {key, name} for all accessible Jira projects."""
@@ -124,6 +160,8 @@ def fetch_projects():
     projects, err = client.fetch_projects()
     if err:
         return jsonify({"error": err}), 502
+    save_projects(projects)
+    log.info("fetch_projects: saved %d projects to cache", len(projects))
     return jsonify(projects)
 
 
