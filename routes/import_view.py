@@ -1,34 +1,12 @@
-import json
 import uuid
-from pathlib import Path
 
 from flask import Blueprint, render_template, request, flash, redirect, url_for, session
 
 from parser import parse_copilot_output
-from models import Epic
-from routes import is_valid_work_id
 from config import load_config
+from work_store import load_epics, save_epics, set_session_work_id, get_session_work_id
 
 bp = Blueprint("import_view", __name__, url_prefix="/import")
-
-WORK_DIR = Path(__file__).parent.parent / ".work"
-
-
-def _work_path(work_id: str) -> Path:
-    return WORK_DIR / f"{work_id}.json"
-
-
-def _save_epics(work_id: str, epics: list) -> None:
-    data = [e.to_dict() for e in epics]
-    _work_path(work_id).write_text(json.dumps(data, indent=2), encoding="utf-8")
-
-
-def _load_epics(work_id: str) -> list:
-    path = _work_path(work_id)
-    if not path.exists():
-        return []
-    data = json.loads(path.read_text(encoding="utf-8"))
-    return [Epic.from_dict(d) for d in data]
 
 
 @bp.route("/", methods=["GET"])
@@ -57,19 +35,19 @@ def parse():
         return redirect(url_for("import_view.index"))
 
     work_id = str(uuid.uuid4())
-    session["work_id"] = work_id
-    _save_epics(work_id, epics)
+    set_session_work_id(work_id)
+    save_epics(work_id, epics)
 
     return redirect(url_for("import_view.view"))
 
 
 @bp.route("/view", methods=["GET"])
 def view():
-    work_id = session.get("work_id")
-    if not work_id or not is_valid_work_id(work_id):
+    work_id = get_session_work_id()
+    if not work_id:
         flash("No parsed data found. Please import first.", "warning")
         return redirect(url_for("import_view.index"))
-    epics = _load_epics(work_id)
+    epics = load_epics(work_id)
     if not epics:
         flash("No epics found. Please re-import.", "warning")
         return redirect(url_for("import_view.index"))
@@ -80,12 +58,12 @@ def view():
 
 @bp.route("/confirm", methods=["POST"])
 def confirm():
-    work_id = session.get("work_id")
-    if not work_id or not is_valid_work_id(work_id):
+    work_id = get_session_work_id()
+    if not work_id:
         flash("Session expired. Please re-import.", "warning")
         return redirect(url_for("import_view.index"))
 
-    epics = _load_epics(work_id)
+    epics = load_epics(work_id)
     if not epics:
         flash("No data found. Please re-import.", "warning")
         return redirect(url_for("import_view.index"))
@@ -98,6 +76,6 @@ def confirm():
         for j, story in enumerate(epic.stories):
             story.include = f"story_{i}_{j}" in request.form
 
-    _save_epics(work_id, epics)
+    save_epics(work_id, epics)
     flash("Selections saved. Review and edit your epics below.", "success")
     return redirect(url_for("edit.index"))

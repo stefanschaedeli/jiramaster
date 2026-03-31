@@ -1,6 +1,7 @@
 import logging
 import os
 import secrets
+from datetime import timedelta
 from pathlib import Path
 
 from logging_config import setup_logging
@@ -28,9 +29,24 @@ if not _secret_key:
 app.secret_key = _secret_key
 csrf = CSRFProtect(app)
 
-# Ensure .work directory exists
+# Session cookie security
+app.config["SESSION_COOKIE_HTTPONLY"] = True                               # explicit (Flask default)
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"                             # prevent cross-site CSRF
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=8)             # 8h, not 31 days
+app.config["SESSION_COOKIE_SECURE"] = os.environ.get("HTTPS", "") == "1"  # only when behind TLS
+
+
+@app.before_request
+def _make_session_permanent():
+    session.permanent = True
+
+
+# Ensure .work directory exists; clean up stale files from previous runs
 WORK_DIR = Path(__file__).parent / ".work"
 WORK_DIR.mkdir(exist_ok=True)
+
+from work_store import cleanup_stale_work_files
+cleanup_stale_work_files(max_age_hours=24)
 
 from routes import register_blueprints
 register_blueprints(app)
