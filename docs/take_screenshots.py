@@ -28,7 +28,21 @@ FAKE_CONFIG = '''{
   "project_key": "DEMO",
   "ac_field_id": "",
   "proxy": "",
+  "org_id": "",
   "labels": []
+}'''
+
+FAKE_CACHE_ASSIGNEES = '''{
+  "updated_at": "2026-03-31T10:00:00+00:00",
+  "items": [
+    {"account_id": "abc1", "display_name": "Alice Johnson", "emailAddress": "alice@example.com"},
+    {"account_id": "abc2", "display_name": "Bob Smith", "emailAddress": "bob@example.com"}
+  ]
+}'''
+
+FAKE_CACHE_LABELS = '''{
+  "updated_at": "2026-03-31T10:00:00+00:00",
+  "items": ["backend", "frontend", "urgent"]
 }'''
 
 # Sample work file for pages that need loaded epics
@@ -116,6 +130,35 @@ def write_sample_work(root: Path) -> str:
     return uid
 
 
+def write_fake_cache(root: Path) -> bool:
+    """Write fake cache files so Cache Manager page renders with content."""
+    cache_dir = root / "cache"
+    cache_dir.mkdir(exist_ok=True)
+    assignees_file = cache_dir / "assignees.json"
+    labels_file = cache_dir / "labels.json"
+    written = False
+    if not assignees_file.exists():
+        assignees_file.write_text(FAKE_CACHE_ASSIGNEES)
+        print("  wrote fake cache/assignees.json")
+        written = True
+    if not labels_file.exists():
+        labels_file.write_text(FAKE_CACHE_LABELS)
+        print("  wrote fake cache/labels.json")
+        written = True
+    return written
+
+
+def cleanup_fake_cache(root: Path, created: bool):
+    """Remove fake cache files if we created them."""
+    if not created:
+        return
+    for name in ("assignees.json", "labels.json"):
+        f = root / "cache" / name
+        if f.exists():
+            f.unlink()
+            print(f"  removed fake cache/{name}")
+
+
 def start_flask(root: Path, port: int = 5001):
     """Start Flask in background on given port. Returns process."""
     # Patch app.py port temporarily via a wrapper script
@@ -154,13 +197,15 @@ def take_screenshots(root: Path, work_id: str, port: int = 5001):
     base = f"http://127.0.0.1:{port}"
 
     pages_to_shot = [
-        ("01_prompt",   f"{base}/prompt/",            "Step 1 — Prompt Builder"),
-        ("02_import",   f"{base}/import/",            "Step 2a — Import"),
-        ("03_import_view", f"{base}/import/view",     "Step 2b — Import View"),
-        ("04_edit",     f"{base}/edit/",              "Step 3 — Edit"),
-        ("05_upload_preview", f"{base}/upload/preview", "Step 4 — Upload Preview"),
-        ("06_settings", f"{base}/settings/",          "Settings"),
-        ("07_tools",    f"{base}/tools/",             "Jira Tools"),
+        ("00_home",           f"{base}/",               "Home — Landing Page"),
+        ("01_prompt",         f"{base}/prompt/",         "Step 1 — Prompt Builder"),
+        ("02_import",         f"{base}/import/",         "Step 2a — Import"),
+        ("03_import_view",    f"{base}/import/view",     "Step 2b — Import View"),
+        ("04_edit",           f"{base}/edit/",           "Step 3 — Edit"),
+        ("05_upload_preview", f"{base}/upload/preview",  "Step 4 — Upload Preview"),
+        ("06_settings",       f"{base}/settings/",       "Settings"),
+        ("07_tools",          f"{base}/tools/",          "Jira Tools"),
+        ("08_cache",          f"{base}/cache/",          "Cache Manager"),
     ]
 
     # Inject the work_id cookie for pages that need it
@@ -241,6 +286,7 @@ def main():
     port = 5001
 
     created_config = write_fake_config(root)
+    created_cache = write_fake_cache(root)
     work_id = write_sample_work(root)
 
     print("Starting Flask app...")
@@ -257,14 +303,14 @@ def main():
         except subprocess.TimeoutExpired:
             proc.kill()
 
-        # Clean up fake config if we created it
         if created_config:
             cfg = root / "config.json"
             if cfg.exists():
                 cfg.unlink()
                 print("  removed fake config.json")
 
-        # Clean up wrapper script
+        cleanup_fake_cache(root, created_cache)
+
         wrapper = root / "_screenshot_runner.py"
         if wrapper.exists():
             wrapper.unlink()

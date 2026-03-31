@@ -8,13 +8,14 @@ JiraMaster is a Flask web application that bridges the gap between your AI assis
 ![Flask](https://img.shields.io/badge/Flask-3.x-lightgrey)
 ![Jira Cloud](https://img.shields.io/badge/Jira-Cloud%20REST%20v3-0052CC)
 ![License](https://img.shields.io/badge/License-GPLv3-green)
-![Version](https://img.shields.io/badge/version-1.7.0-orange)
+![Version](https://img.shields.io/badge/version-1.8.0-orange)
 
 ---
 
 ## Table of Contents
 
 - [Overview](#overview)
+- [Landing Page](#landing-page)
 - [Architecture](#architecture)
 - [Data Flow](#data-flow)
 - [Installation](#installation)
@@ -25,6 +26,7 @@ JiraMaster is a Flask web application that bridges the gap between your AI assis
   - [Step 3: Edit Epics & Stories](#step-3-edit-epics--stories)
   - [Step 4: Upload to Jira](#step-4-upload-to-jira)
 - [Jira Tools](#jira-tools)
+- [Cache Manager](#cache-manager)
 - [Advanced Topics](#advanced-topics)
 - [Project Structure](#project-structure)
 - [Troubleshooting](#troubleshooting)
@@ -40,6 +42,7 @@ JiraMaster solves a common pain point: after a meeting, you have Copilot or Chat
 2. **Import** the YAML/JSON output your LLM produces
 3. **Edit** every field — titles, acceptance criteria, assignees, labels, priorities, due dates
 4. **Upload** directly to Jira Cloud via REST API v3
+5. **Browse** a landing page that surfaces all modules with quick-access links
 
 No database. No migrations. Works out of the box with `./scripts/start.sh`.
 
@@ -52,11 +55,11 @@ No database. No migrations. Works out of the box with `./scripts/start.sh`.
 | Layer | Components |
 |-------|-----------|
 | **Client** | Browser — interacts with the Flask web UI |
-| **Application** | Flask 3.x app (`app.py`) with 6 route blueprints: `/prompt`, `/import`, `/edit`, `/upload`, `/settings`, `/tools` |
-| **Core Modules** | `parser.py`, `prompt_builder.py`, `jira_client.py`, `config.py`, `models.py`, `logging_config.py` |
-| **File Storage** | `.work/{uuid}.json` per session, `config.json`, `assignees.json`, `labels.json` — no database |
-| **External** | Jira Cloud (REST API v3), and your LLM of choice (manual copy/paste) |
-| **Launch Scripts** | `scripts/start.sh` (macOS/Linux) and `scripts/start.ps1` (Windows) — manage venv, deps, TLS cert merging |
+| **Application** | Flask 3.x app (`app.py`) with 8 route blueprints: `/` (home), `/prompt`, `/import`, `/edit`, `/upload`, `/settings`, `/tools`, `/cache` |
+| **Core Modules** | `parser.py`, `prompt_builder.py`, `jira_client.py`, `config.py`, `models.py`, `work_store.py`, `logging_config.py` |
+| **File Storage** | `.work/{uuid}.json` per session; `cache/` directory for assignees, labels, projects; `config.json` — no database |
+| **External** | Jira Cloud (REST API v3), Atlassian Teams API, OS Keyring (macOS Keychain / Windows Credential Manager), and your LLM of choice |
+| **Launch Scripts** | `scripts/start.sh` (macOS/Linux) and `scripts/start.ps1` + `scripts/start.bat` (Windows) — manage venv, deps, TLS cert merging |
 
 ### Key Design Decisions
 
@@ -66,6 +69,7 @@ No database. No migrations. Works out of the box with `./scripts/start.sh`.
 - **TLS proxy support** — `scripts/start.sh`/`scripts/start.ps1` merge your system CA certificates into the certifi bundle automatically, so corporate TLS-inspection proxies work without admin rights.
 - **Centralised logging** — all modules use `logging.getLogger(__name__)`; a single `setup_logging()` call in `app.py` routes everything to a rotating file log and console.
 - **Secure credential storage** — API tokens can be stored in the OS keyring (macOS Keychain, Windows Credential Manager) instead of plaintext `config.json`.
+- **Security hardening** — all responses carry CSP, X-Frame-Options, and X-Content-Type-Options headers; session cookies are HttpOnly, SameSite=Lax, 8-hour lifetime; work-file access is validated against a session fingerprint.
 
 ---
 
@@ -199,6 +203,21 @@ The Settings page shows a **Security Status** panel with:
 ### Detecting the Acceptance Criteria Field
 
 If your Jira project uses a custom AC field, click **Detect Fields** in Settings. JiraMaster will inspect your project's issue create metadata and find fields whose name contains "acceptance" or "criteria".
+
+---
+
+## Landing Page
+
+![Home](docs/images/00_home.png)
+
+Navigate to **http://127.0.0.1:5000** to reach the landing page. It provides quick access to all modules:
+
+- **Meeting to Jira** — start the 4-step wizard
+- **Jira Tools** — refresh cached project data
+- **Cache Manager** — inspect and clear local caches
+- **Settings** — configure your Jira connection
+
+The navbar's home icon (JiraMaster) returns to this page from anywhere in the app.
 
 ---
 
@@ -351,6 +370,29 @@ Run **Refresh Assignees** and **Refresh Labels** once after setup, and again whe
 
 ---
 
+## Cache Manager
+
+![Cache Manager](docs/images/08_cache.png)
+
+Navigate to **Cache** in the top nav (or **http://127.0.0.1:5000/cache**).
+
+The Cache Manager shows the current state of all locally cached Jira data:
+
+| Cache | Contents | Source |
+|-------|----------|--------|
+| **Assignees** | Jira assignable users (display name, email, account ID) | Jira Tools → Refresh Assignees |
+| **Labels** | Top 40 most-used project labels | Jira Tools → Refresh Labels |
+| **Projects** | Accessible Jira project list | Jira Tools → Load Projects |
+
+For each cache you can:
+- View item count and last-fetched timestamp
+- **Delete** individual entries
+- **Clear all** entries in a cache
+
+Caches are stored in the `cache/` directory as JSON files with metadata headers.
+
+---
+
 ## Advanced Topics
 
 ### Debug Mode
@@ -421,8 +463,9 @@ JiraMaster/
 ├── parser.py               # Parse YAML/JSON LLM output → Epic/Story objects
 ├── prompt_builder.py       # Build tunable prompts (aggressiveness, detail, story count)
 ├── logging_config.py       # Centralised logging (rotating file + console)
-├── assignees.py            # Load/save assignees.json cache
-├── labels.py               # Load/save labels.json cache
+├── work_store.py           # Centralised session work-file access with fingerprint validation
+├── assignees.py            # Assignee cache helpers (reads/writes cache/assignees.json)
+├── labels.py               # Label cache helpers (reads/writes cache/labels.json)
 │
 ├── routes/
 │   ├── prompt.py           # /prompt — generate & download prompt
@@ -430,9 +473,11 @@ JiraMaster/
 │   ├── edit.py             # /edit — edit all epic/story fields
 │   ├── upload.py           # /upload — preview and push to Jira
 │   ├── settings.py         # /settings — Jira credentials, field config, security status
-│   └── tools.py            # /tools — refresh assignees/labels, fetch projects/roles/groups
+│   ├── tools.py            # /tools — refresh assignees/labels, fetch projects/roles/groups
+│   └── cache_manager.py    # /cache — view and manage local caches
 │
 ├── templates/              # Jinja2 templates (one subdirectory per blueprint)
+│                           #   home/, prompt/, import/, edit/, upload/, settings/, tools/, cache_manager/
 ├── static/
 │   ├── style.css           # Bootstrap 5.3 overrides
 │   └── app.js              # Clipboard copy, story toggles, cascade checkbox logic
@@ -465,8 +510,9 @@ JiraMaster/
 |------|---------|
 | `config.json` | Jira credentials and settings |
 | `.secret_key` | Flask session secret (auto-generated) |
-| `assignees.json` | Cached Jira assignable users |
-| `labels.json` | Cached Jira labels |
+| `cache/assignees.json` | Cached Jira assignable users |
+| `cache/labels.json` | Cached Jira labels |
+| `cache/projects.json` | Cached Jira project list |
 | `.work/{uuid}.json` | In-progress session work files |
 | `logs/jiramaster.log` | Rotating application log |
 | `logs/startup.log` | Startup diagnostics |
@@ -499,6 +545,9 @@ Your Jira account may not have permission to list groups or roles. Check with yo
 - Ensure your LLM output starts with `epics:` (YAML) or `{"epics":` (JSON)
 - Strip any preamble text before pasting — the LLM sometimes adds "Here is the YAML:" before the content
 - Try **Detail Level: Standard** in Step 1 if the LLM keeps adding extra fields
+
+### Cache Manager shows empty caches
+Go to **Jira Tools** and run **Refresh Assignees** and **Refresh Labels** first. The Cache Manager only shows data that has been fetched at least once.
 
 ### Keyring not available
 On Linux, `keyring` requires a backend (e.g. `gnome-keyring`, `kwallet`, or `pass`). If none is installed, credentials fall back to `config.json` automatically — no action needed. The Settings page shows current credential storage mode.
