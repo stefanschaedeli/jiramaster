@@ -50,7 +50,7 @@ def _set_security_headers(response):
         "script-src 'self' https://cdn.jsdelivr.net; "
         "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
         "img-src 'self' data:; "
-        "font-src 'self'; "
+        "font-src 'self' https://cdn.jsdelivr.net; "
         "connect-src 'self'; "
         "frame-ancestors 'none'"
     )
@@ -77,8 +77,7 @@ register_blueprints(app)
 
 @app.route("/")
 def root():
-    from flask import redirect, url_for
-    return redirect(url_for("prompt.index"))
+    return render_template("home/index.html")
 
 
 def _get_git_version():

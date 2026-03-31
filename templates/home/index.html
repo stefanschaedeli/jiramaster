@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Home | JiraMaster{% endblock %}
+
+{% block content %}
+<!-- Hero -->
+<section class="landing-hero text-center">
+  <div class="row justify-content-center">
+    <div class="col-lg-7">
+      <h1 class="display-5 fw-bold mb-3">Meeting Notes to Jira Tickets</h1>
+      <p class="lead text-muted mb-4">
+        Transform meeting discussions into structured Jira epics, stories, and sub-tasks
+        with an AI-assisted 4-step workflow.
+      </p>
+      <a href="{{ url_for('prompt.index') }}" class="btn btn-primary btn-lg px-5">
+        <i class="bi bi-play-circle me-2"></i>Start New Workflow
+      </a>
+      {% if not jira_configured %}
+      <p class="mt-3 mb-0">
+        <a href="{{ url_for('settings.index') }}" class="text-muted small">
+          <i class="bi bi-exclamation-triangle text-warning me-1"></i>Configure Jira connection first
+        </a>
+      </p>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<!-- Module cards -->
+<section class="mb-4">
+  <div class="row g-4">
+
+    <!-- Meeting to Jira -->
+    <div class="col-md-6 col-lg-3">
+      <div class="card h-100 landing-card">
+        <div class="card-body text-center pt-4">
+          <div class="landing-icon text-primary"><i class="bi bi-clipboard2-pulse"></i></div>
+          <h5 class="card-title fw-semibold">Meeting to Jira</h5>
+          <p class="card-text text-muted small">
+            Convert meeting notes into structured Jira issues. A 4-step wizard guides you
+            from raw notes to uploaded epics and stories.
+          </p>
+        </div>
+        <div class="card-footer bg-transparent border-0 text-center pb-4">
+          <a href="{{ url_for('prompt.index') }}" class="btn btn-primary btn-sm px-4">
+            Start Wizard
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Jira Tools -->
+    <div class="col-md-6 col-lg-3">
+      <div class="card h-100 landing-card">
+        <div class="card-body text-center pt-4">
+          <div class="landing-icon text-success"><i class="bi bi-wrench-adjustable"></i></div>
+          <h5 class="card-title fw-semibold">Jira Tools</h5>
+          <p class="card-text text-muted small">
+            Refresh and sync project data from Jira. Download assignees, labels, and
+            project lists to keep your local cache current.
+          </p>
+        </div>
+        <div class="card-footer bg-transparent border-0 text-center pb-4">
+          <a href="{{ url_for('tools.index') }}" class="btn btn-outline-success btn-sm px-4">
+            Open Tools
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cache Manager -->
+    <div class="col-md-6 col-lg-3">
+      <div class="card h-100 landing-card">
+        <div class="card-body text-center pt-4">
+          <div class="landing-icon text-info"><i class="bi bi-database"></i></div>
+          <h5 class="card-title fw-semibold">Cache Manager</h5>
+          <p class="card-text text-muted small">
+            View and manage locally cached Jira data. Inspect or clear cached assignees,
+            labels, and projects.
+          </p>
+        </div>
+        <div class="card-footer bg-transparent border-0 text-center pb-4">
+          <a href="{{ url_for('cache_manager.index') }}" class="btn btn-outline-info btn-sm px-4">
+            Manage Cache
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div class="col-md-6 col-lg-3">
+      <div class="card h-100 landing-card">
+        <div class="card-body text-center pt-4">
+          <div class="landing-icon text-secondary"><i class="bi bi-gear"></i></div>
+          <h5 class="card-title fw-semibold">
+            Settings
+            {% if not jira_configured %}
+            <span class="badge bg-warning text-dark ms-1" style="font-size:0.6rem;vertical-align:middle;">Not configured</span>
+            {% endif %}
+          </h5>
+          <p class="card-text text-muted small">
+            Configure your Jira Cloud connection. Set credentials, project key,
+            proxy settings, and auto-detect field IDs.
+          </p>
+        </div>
+        <div class="card-footer bg-transparent border-0 text-center pb-4">
+          <a href="{{ url_for('settings.index') }}" class="btn btn-outline-secondary btn-sm px-4">
+            Configure
+          </a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- Status footer -->
+<div class="text-center mt-2 mb-2">
+  {% if jira_configured %}
+  <p class="text-muted small mb-0">
+    <i class="bi bi-check-circle-fill text-success me-1"></i>Connected &mdash; project <strong>{{ project_key }}</strong>
+  </p>
+  {% else %}
+  <p class="text-muted small mb-0">
+    <i class="bi bi-exclamation-circle-fill text-warning me-1"></i>Jira not configured &mdash;
+    <a href="{{ url_for('settings.index') }}">set up your connection</a> to get started.
+  </p>
+  {% endif %}
+</div>
+{% endblock %}
