@@ -80,29 +80,6 @@
             </div>
           </div>
 
-          <div class="mb-4">
-            <label class="form-label fw-semibold">
-              Labels <span class="text-muted fw-normal">(optional)</span>
-            </label>
-            {% if label_cache %}
-              <div class="border rounded p-2" style="max-height:160px;overflow-y:auto;">
-                {% for lbl in label_cache %}
-                  <div class="form-check">
-                    <input class="form-check-input" type="checkbox" name="labels" value="{{ lbl }}"
-                           id="lbl_{{ loop.index }}"
-                           {% if lbl in cfg.labels %}checked{% endif %}>
-                    <label class="form-check-label small" for="lbl_{{ loop.index }}">{{ lbl }}</label>
-                  </div>
-                {% endfor %}
-              </div>
-              <div class="form-text">Checked labels are applied to every epic and story created by this tool.</div>
-            {% else %}
-              <div class="form-text text-warning">
-                No label cache — go to <a href="{{ url_for('tools.index') }}"><strong>Jira Tools</strong></a> to load available labels from Jira.
-              </div>
-            {% endif %}
-          </div>
-
           <div class="d-flex gap-2 flex-wrap">
             <button type="submit" class="btn btn-primary">Save Settings</button>
             <button type="submit" form="testForm" class="btn btn-outline-secondary">
@@ -166,20 +143,6 @@
                 <div class="small text-muted">{{ assignees|length }} users cached — <a href="{{ url_for('tools.index') }}">Jira Tools</a> to update</div>
               {% else %}
                 <div class="small text-muted">No cache — go to <a href="{{ url_for('tools.index') }}">Jira Tools</a> to fetch from Jira</div>
-              {% endif %}
-            </div>
-          </div>
-          <div class="mt-3 d-flex align-items-center gap-2 {% if label_cache %}text-success{% else %}text-muted{% endif %}">
-            <span class="fs-5">{% if label_cache %}✓{% else %}–{% endif %}</span>
-            <div>
-              <div class="fw-semibold small">Label Cache</div>
-              {% if label_cache %}
-                <div class="small text-muted">{{ label_cache|length }} labels cached — <a href="{{ url_for('tools.index') }}">Jira Tools</a> to update</div>
-              {% else %}
-                <div class="small text-muted">No cache — go to <a href="{{ url_for('tools.index') }}">Jira Tools</a> to fetch from Jira</div>
-              {% endif %}
-              {% if cfg.labels %}
-                <div class="small text-muted mt-1">Selected: {{ cfg.labels | join(', ') }}</div>
               {% endif %}
             </div>
           </div>

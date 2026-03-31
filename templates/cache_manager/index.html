@@ -17,7 +17,7 @@
     <button class="btn btn-link fw-semibold text-decoration-none p-0"
             data-bs-toggle="collapse" data-bs-target="#collapse-{{ cache_type }}">
       {{ title }}
-      <span class="badge bg-secondary ms-2">{{ meta.items | length }}</span>
+      <span class="badge bg-secondary ms-2">{{ meta['items'] | length }}</span>
     </button>
     <div class="d-flex align-items-center gap-3">
       {% if meta.updated_at %}
@@ -26,14 +26,14 @@
         <span class="small text-muted">No cache</span>
       {% endif %}
       <button class="btn btn-sm btn-outline-danger clear-all-btn" data-cache-type="{{ cache_type }}"
-              {% if not meta.items %}disabled{% endif %}>
+              {% if not meta['items'] %}disabled{% endif %}>
         Clear all
       </button>
     </div>
   </div>
   <div class="collapse show" id="collapse-{{ cache_type }}">
     <div class="card-body p-0">
-      {% if meta.items %}
+      {% if meta['items'] %}
       <div class="table-responsive">
         <table class="table table-sm table-hover mb-0">
           <thead class="table-light">

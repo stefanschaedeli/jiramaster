@@ -4,7 +4,6 @@ from config import load_config, save_config, get_security_status
 from models import JiraConfig
 from jira_client import JiraClient
 from assignees import load_assignees
-from labels import load_label_cache
 
 bp = Blueprint("settings", __name__, url_prefix="/settings")
 
@@ -13,10 +12,9 @@ bp = Blueprint("settings", __name__, url_prefix="/settings")
 def index():
     cfg = load_config()
     assignees = load_assignees()
-    label_cache = load_label_cache()
     security = get_security_status()
     return render_template("settings/index.html", cfg=cfg, assignees=assignees,
-                           label_cache=label_cache, security=security)
+                           security=security)
 
 
 @bp.route("/save", methods=["POST"])
@@ -30,7 +28,6 @@ def save():
         flash("Proxy URL must start with http:// or https://", "danger")
         return redirect(url_for("settings.index"))
     existing = load_config()
-    labels = request.form.getlist("labels")
     cfg = JiraConfig(
         base_url=base_url,
         username=request.form.get("username", "").strip(),
@@ -39,7 +36,7 @@ def save():
         ac_field_id=request.form.get("ac_field_id", existing.ac_field_id).strip(),
         proxy_url=proxy_url,
         org_id=request.form.get("org_id", "").strip(),
-        labels=labels,
+        labels=existing.labels,
     )
     save_config(cfg)
     flash("Settings saved.", "success")
@@ -67,14 +64,14 @@ def test_connection():
         flash("Jira Base URL must start with https://", "danger")
         cfg = JiraConfig()
         return render_template("settings/index.html", cfg=cfg,
-                               assignees=load_assignees(), label_cache=load_label_cache(),
+                               assignees=load_assignees(),
                                security=get_security_status())
     proxy_url = request.form.get("proxy_url", "").strip()
     if proxy_url and not (proxy_url.startswith("http://") or proxy_url.startswith("https://")):
         flash("Proxy URL must start with http:// or https://", "danger")
         cfg = JiraConfig()
         return render_template("settings/index.html", cfg=cfg,
-                               assignees=load_assignees(), label_cache=load_label_cache(),
+                               assignees=load_assignees(),
                                security=get_security_status())
     cfg = JiraConfig(
         base_url=base_url,
@@ -91,5 +88,5 @@ def test_connection():
     else:
         flash(f"Connection failed: {msg}", "danger")
     return render_template("settings/index.html", cfg=cfg,
-                           assignees=load_assignees(), label_cache=load_label_cache(),
+                           assignees=load_assignees(),
                            security=get_security_status())
