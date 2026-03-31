@@ -222,6 +222,14 @@
     ta.addEventListener('input', function () { checkAC(ta); });
   });
 
+  // Clear search filter on a given assignee select (reveals all options)
+  function clearAssigneeSearch(assigneeSelect) {
+    var searchInput = assigneeSelect.closest('[class*="col-"]').querySelector('.assignee-search');
+    if (!searchInput) { return; }
+    searchInput.value = '';
+    Array.prototype.forEach.call(assigneeSelect.options, function (opt) { opt.style.display = ''; });
+  }
+
   // Propagate epic assignee to stories that are still unassigned
   document.querySelectorAll('select[name$="_assignee"]').forEach(function (epicSelect) {
     if (!/^epic_\d+_assignee$/.test(epicSelect.name)) return;
@@ -232,6 +240,7 @@
       container.querySelectorAll('select[name^="story_' + epicIndex + '_"]').forEach(function (storySelect) {
         if (/^story_\d+_\d+_assignee$/.test(storySelect.name) && storySelect.value === '') {
           storySelect.value = epicValue;
+          clearAssigneeSearch(storySelect); // reveal cascaded selection in search-filtered dropdowns
         }
       });
     });
@@ -239,12 +248,14 @@
 
   // Live search filter for assignee dropdowns
   function initAssigneeSearch(searchInput) {
-    var select = searchInput.nextElementSibling;
+    var select = searchInput.closest('[class*="col-"]').querySelector('.assignee-select');
+    if (!select) { return; }
     searchInput.addEventListener('input', function () {
       var term = searchInput.value.toLowerCase();
       Array.prototype.forEach.call(select.options, function (opt) {
         if (opt.value === '') { return; } // always show "— unassigned —"
-        opt.style.display = opt.textContent.toLowerCase().indexOf(term) !== -1 ? '' : 'none';
+        // Keep selected option visible even when it doesn't match the search term
+        opt.style.display = (opt.selected || opt.textContent.toLowerCase().indexOf(term) !== -1) ? '' : 'none';
       });
     });
   }
