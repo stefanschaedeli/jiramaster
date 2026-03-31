@@ -44,7 +44,7 @@
           </thead>
           <tbody>
             {% if cache_type == 'assignees' %}
-              {% for item in meta.items %}
+              {% for item in meta['items'] %}
               <tr data-item-id="{{ item.accountId }}">
                 <td class="ps-3">{{ item.displayName or '—' }}</td>
                 <td>{{ item.emailAddress or '—' }}</td>
@@ -57,7 +57,7 @@
               </tr>
               {% endfor %}
             {% elif cache_type == 'labels' %}
-              {% for item in meta.items %}
+              {% for item in meta['items'] %}
               <tr data-item-id="{{ item }}">
                 <td class="ps-3">{{ item }}</td>
                 <td class="text-end pe-3">
@@ -68,7 +68,7 @@
               </tr>
               {% endfor %}
             {% elif cache_type == 'projects' %}
-              {% for item in meta.items %}
+              {% for item in meta['items'] %}
               <tr data-item-id="{{ item.key }}">
                 <td class="ps-3 fw-semibold">{{ item.key }}</td>
                 <td>{{ item.name }}</td>
