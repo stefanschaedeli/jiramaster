@@ -235,7 +235,7 @@ class JiraClient:
                     params={
                         "groupname": group_name,
                         "startAt": start_at,
-                        "maxResults": min(50, max_results - len(users)),
+                        "maxResults": 50,
                         "includeInactiveUsers": False,
                     },
                     timeout=10,
@@ -251,7 +251,7 @@ class JiraClient:
                             "displayName": u.get("displayName", ""),
                             "emailAddress": u.get("emailAddress", ""),
                         })
-                if not page or data.get("isLast", True) or len(users) >= max_results:
+                if not page or data.get("isLast", False) or len(users) >= max_results:
                     break
                 start_at += len(page)
             log.info("fetch_group_members: group=%r → %d members", group_name, len(users))
