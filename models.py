@@ -121,6 +121,7 @@ class JiraConfig:
     project_key: str = ""
     ac_field_id: str = "customfield_11401"  # override via Settings if different in your Jira
     proxy_url: str = ""
+    org_id: str = ""
     labels: List[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -131,6 +132,7 @@ class JiraConfig:
             "project_key": self.project_key,
             "ac_field_id": self.ac_field_id,
             "proxy_url": self.proxy_url,
+            "org_id": self.org_id,
             "labels": self.labels,
         }
 
@@ -147,6 +149,7 @@ class JiraConfig:
             project_key=d.get("project_key", ""),
             ac_field_id=d.get("ac_field_id", "customfield_11401"),
             proxy_url=d.get("proxy_url", ""),
+            org_id=d.get("org_id", ""),
             labels=raw_labels,
         )
 
