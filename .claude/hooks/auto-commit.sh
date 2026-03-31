@@ -74,6 +74,6 @@ Automated ${LABEL} release — changes committed by Claude Code session
 EOF
 )"
 
-git push 2>/dev/null && PUSHED="pushed" || PUSHED="push failed"
+git push --set-upstream origin "$(git rev-parse --abbrev-ref HEAD)" 2>/dev/null && PUSHED="pushed" || PUSHED="push failed"
 
 echo "{\"systemMessage\": \"Auto-committed: v${CURRENT} → v${NEW_VERSION} (${LABEL}) — ${PUSHED}\"}"
