@@ -42,11 +42,28 @@ def root():
     return redirect(url_for("prompt.index"))
 
 
+def _get_git_version():
+    """Return short git commit hash, or 'unknown' if not in a git repo."""
+    import subprocess
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=Path(__file__).parent,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+    except Exception:
+        return "unknown"
+
+_APP_VERSION = _get_git_version()
+log.info("JiraMaster version: %s", _APP_VERSION)
+
+
 @app.context_processor
 def inject_globals():
     from config import load_config
     cfg = load_config()
-    return {"jira_configured": cfg.is_configured(), "project_key": cfg.project_key}
+    return {"jira_configured": cfg.is_configured(), "project_key": cfg.project_key, "app_version": _APP_VERSION}
 
 
 if __name__ == "__main__":
