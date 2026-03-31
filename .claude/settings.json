@@ -1,4 +1,18 @@
 {
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /Users/stefan/Code/JiraMaster/.claude/hooks/auto-commit.sh",
+            "timeout": 30,
+            "statusMessage": "Bumping patch version and committing..."
+          }
+        ]
+      }
+    ]
+  },
   "permissions": {
     "allow": [
       "Bash(python -m pytest*)",
