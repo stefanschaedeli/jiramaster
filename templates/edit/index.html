@@ -53,7 +53,11 @@
             </div>
             <div class="col-md-4">
               <label class="form-label fw-semibold">Assignee</label>
-              <select name="epic_{{ i }}_assignee" class="form-select">
+              {% if assignees %}
+              <input type="text" class="form-control form-control-sm mb-1 assignee-search"
+                     placeholder="Search assignees…" autocomplete="off">
+              {% endif %}
+              <select name="epic_{{ i }}_assignee" class="form-select assignee-select">
                 <option value="">— unassigned —</option>
                 {% for u in assignees %}
                   <option value="{{ u.displayName }}"
@@ -63,7 +67,7 @@
                 {% endfor %}
               </select>
               {% if not assignees %}
-              <div class="form-text text-warning">No assignees cached — go to Settings → Refresh Assignees</div>
+              <div class="form-text text-warning">No assignees cached — go to <a href="{{ url_for('tools.index') }}">Jira Tools</a> → Refresh Assignees</div>
               {% endif %}
             </div>
             <div class="col-md-2">
@@ -132,7 +136,11 @@
               </div>
               <div class="col-md-4">
                 <label class="form-label small fw-semibold">Assignee</label>
-                <select name="story_{{ i }}_{{ j }}_assignee" class="form-select form-select-sm">
+                {% if assignees %}
+                <input type="text" class="form-control form-control-sm mb-1 assignee-search"
+                       placeholder="Search assignees…" autocomplete="off">
+                {% endif %}
+                <select name="story_{{ i }}_{{ j }}_assignee" class="form-select form-select-sm assignee-select">
                   <option value="">— unassigned —</option>
                   {% for u in assignees %}
                     <option value="{{ u.displayName }}"
@@ -142,7 +150,7 @@
                   {% endfor %}
                 </select>
                 {% if not assignees %}
-                <div class="form-text text-warning">No assignees cached — go to Settings → Refresh Assignees</div>
+                <div class="form-text text-warning">No assignees cached — go to <a href="{{ url_for('tools.index') }}">Jira Tools</a> → Refresh Assignees</div>
                 {% endif %}
               </div>
               <div class="col-md-2">
@@ -228,6 +236,19 @@
       });
     });
   });
+
+  // Live search filter for assignee dropdowns
+  function initAssigneeSearch(searchInput) {
+    var select = searchInput.nextElementSibling;
+    searchInput.addEventListener('input', function () {
+      var term = searchInput.value.toLowerCase();
+      Array.prototype.forEach.call(select.options, function (opt) {
+        if (opt.value === '') { return; } // always show "— unassigned —"
+        opt.style.display = opt.textContent.toLowerCase().indexOf(term) !== -1 ? '' : 'none';
+      });
+    });
+  }
+  document.querySelectorAll('.assignee-search').forEach(initAssigneeSearch);
 })();
 </script>
 {% endblock %}
