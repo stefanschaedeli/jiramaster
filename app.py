@@ -43,11 +43,11 @@ def root():
 
 
 def _get_git_version():
-    """Return short git commit hash, or 'unknown' if not in a git repo."""
+    """Return the most recent git tag, or 'unknown' if not in a git repo."""
     import subprocess
     try:
         return subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"],
+            ["git", "describe", "--tags", "--abbrev=0"],
             cwd=Path(__file__).parent,
             stderr=subprocess.DEVNULL,
             text=True,
