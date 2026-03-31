@@ -37,6 +37,20 @@ def refresh_assignees():
     return redirect(url_for("tools.index"))
 
 
+@bp.route("/fetch-roles", methods=["POST"])
+def fetch_roles():
+    """Return JSON list of {id, name} for all roles in the given project."""
+    cfg = load_config()
+    if not cfg.is_configured():
+        return jsonify({"error": "Jira not configured"}), 400
+    project_scope = request.form.get("project_scope", "").strip().upper() or None
+    client = JiraClient(cfg)
+    roles, err = client.fetch_project_roles(project_key=project_scope)
+    if err:
+        return jsonify({"error": err}), 502
+    return jsonify(roles)
+
+
 @bp.route("/fetch-projects", methods=["POST"])
 def fetch_projects():
     """Return JSON list of {key, name} for all accessible Jira projects."""
