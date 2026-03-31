@@ -64,21 +64,32 @@ fi
 echo "$NEW_VERSION" > "$VERSION_FILE"
 git add VERSION
 
-# 5-line commit message
-git commit -m "$(cat <<EOF
-chore: bump to v${NEW_VERSION} (${LABEL} release)
+# Capture the last meaningful commit message (the one before this version bump)
+# to use as the release description
+LAST_COMMIT_MSG="$(git log --format='%B' -1 HEAD 2>/dev/null | sed '/^Co-Authored-By:/d' | sed '/^$/d' | head -20)"
 
-Files changed (${FILE_COUNT}): ${CHANGED_FILES}
-Insertions: +${INSERTIONS:-0}  Deletions: -${DELETIONS:-0}
-Automated ${LABEL} release — changes committed by Claude Code session
+# Version bump commit (minimal — the real description lives on the tag/release)
+git commit -m "chore: bump to v${NEW_VERSION} (${LABEL} release)"
+
+# Annotated tag with the real change description
+TAG_MSG="$(cat <<EOF
+v${NEW_VERSION} (${LABEL} release)
+
+${LAST_COMMIT_MSG}
 EOF
 )"
-
-git tag "v${NEW_VERSION}"
+git tag -a "v${NEW_VERSION}" -m "${TAG_MSG}"
 
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 git push --set-upstream origin "$BRANCH" 2>/dev/null && \
   git push origin "v${NEW_VERSION}" 2>/dev/null && \
   PUSHED="pushed + tagged" || PUSHED="push failed"
+
+# Create GitHub release with the same description (requires gh CLI)
+if command -v gh &>/dev/null; then
+  gh release create "v${NEW_VERSION}" \
+    --title "v${NEW_VERSION}" \
+    --notes "${LAST_COMMIT_MSG}" 2>/dev/null || true
+fi
 
 echo "{\"systemMessage\": \"Auto-committed: v${CURRENT} → v${NEW_VERSION} (${LABEL}) — ${PUSHED}\"}"
