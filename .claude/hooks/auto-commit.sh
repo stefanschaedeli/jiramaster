@@ -74,6 +74,11 @@ Automated ${LABEL} release — changes committed by Claude Code session
 EOF
 )"
 
-git push --set-upstream origin "$(git rev-parse --abbrev-ref HEAD)" 2>/dev/null && PUSHED="pushed" || PUSHED="push failed"
+git tag "v${NEW_VERSION}"
+
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+git push --set-upstream origin "$BRANCH" 2>/dev/null && \
+  git push origin "v${NEW_VERSION}" 2>/dev/null && \
+  PUSHED="pushed + tagged" || PUSHED="push failed"
 
 echo "{\"systemMessage\": \"Auto-committed: v${CURRENT} → v${NEW_VERSION} (${LABEL}) — ${PUSHED}\"}"
