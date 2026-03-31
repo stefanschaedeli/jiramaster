@@ -20,25 +20,77 @@
           {% endif %}
         </div>
 
-        <div class="mb-3">
-          <label for="project-scope-select" class="form-label small fw-semibold">Fetch scope</label>
-          <div class="d-flex gap-2">
-            <select id="project-scope-select" class="form-select form-select-sm">
-              <option value="{{ cfg.project_key if cfg else '' }}" selected>
-                {{ cfg.project_key if cfg else '(not configured)' }} — configured default
-              </option>
-            </select>
-            <button type="button" id="load-projects-btn" class="btn btn-sm btn-outline-secondary text-nowrap">
-              Load Projects
-            </button>
-          </div>
-          <div id="projects-load-error" class="text-danger small mt-1" style="display:none;"></div>
-        </div>
-
-        <form method="POST" action="{{ url_for('tools.refresh_assignees') }}" class="mt-auto" id="refresh-assignees-form">
+        <form method="POST" action="{{ url_for('tools.refresh_assignees') }}" id="refresh-assignees-form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="project_scope" id="project-scope-hidden" value="">
-          <button type="submit" class="btn btn-outline-primary">Refresh Assignees</button>
+
+          <!-- Project scope -->
+          <div class="mb-3">
+            <label for="project-scope-select" class="form-label small fw-semibold">Fetch scope</label>
+            <div class="d-flex gap-2">
+              <select id="project-scope-select" class="form-select form-select-sm">
+                <option value="{{ cfg.project_key if cfg else '' }}" selected>
+                  {{ cfg.project_key if cfg else '(not configured)' }} — configured default
+                </option>
+              </select>
+              <button type="button" id="load-projects-btn" class="btn btn-sm btn-outline-secondary text-nowrap">
+                Load Projects
+              </button>
+            </div>
+            <div id="projects-load-error" class="text-danger small mt-1" style="display:none;"></div>
+          </div>
+
+          <!-- Filter Options (collapsible) -->
+          <div class="mb-3">
+            <a class="small text-muted text-decoration-none" data-bs-toggle="collapse" href="#assignee-filters" role="button" aria-expanded="false" aria-controls="assignee-filters">
+              ▶ Filter Options
+            </a>
+            <div class="collapse mt-2" id="assignee-filters">
+              <div class="border rounded p-3 bg-light">
+
+                <!-- Role filter -->
+                <div class="mb-2">
+                  <label class="form-label small fw-semibold mb-1">Project Role</label>
+                  <div class="d-flex gap-2">
+                    <select name="filter_role_id" id="role-select" class="form-select form-select-sm">
+                      <option value="">— no role filter —</option>
+                    </select>
+                    <button type="button" id="load-roles-btn" class="btn btn-sm btn-outline-secondary text-nowrap">
+                      Load Roles
+                    </button>
+                  </div>
+                  <div id="roles-load-error" class="text-danger small mt-1" style="display:none;"></div>
+                </div>
+
+                <!-- Group filter -->
+                <div class="mb-2">
+                  <label class="form-label small fw-semibold mb-1">Group Name</label>
+                  <input type="text" name="filter_group_name" class="form-control form-control-sm"
+                         placeholder="Exact Jira group name (case-sensitive)">
+                </div>
+
+                <!-- Name/email query -->
+                <div class="mb-2">
+                  <label class="form-label small fw-semibold mb-1">Name / Email Filter</label>
+                  <input type="text" name="filter_query" class="form-control form-control-sm"
+                         placeholder="Partial name or email address">
+                </div>
+
+                <!-- Max results -->
+                <div>
+                  <label class="form-label small fw-semibold mb-1">Max Results</label>
+                  <input type="number" name="filter_max_results" class="form-control form-control-sm"
+                         value="50" min="10" max="200" style="width:90px;">
+                  <div class="form-text">10–200. Active filters are combined with AND logic.</div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-auto">
+            <button type="submit" class="btn btn-outline-primary">Refresh Assignees</button>
+          </div>
         </form>
       </div>
     </div>
@@ -70,18 +122,27 @@
 {% block scripts %}
 <script>
 (function () {
-  const select = document.getElementById('project-scope-select');
-  const btn = document.getElementById('load-projects-btn');
-  const hidden = document.getElementById('project-scope-hidden');
-  const errorDiv = document.getElementById('projects-load-error');
+  const projectSelect = document.getElementById('project-scope-select');
+  const loadProjectsBtn = document.getElementById('load-projects-btn');
+  const projectHidden = document.getElementById('project-scope-hidden');
+  const projectsErrorDiv = document.getElementById('projects-load-error');
+
+  const roleSelect = document.getElementById('role-select');
+  const loadRolesBtn = document.getElementById('load-roles-btn');
+  const rolesErrorDiv = document.getElementById('roles-load-error');
+
   const csrfToken = document.querySelector('#refresh-assignees-form input[name="csrf_token"]').value;
 
-  select.addEventListener('change', function () { hidden.value = select.value; });
+  projectSelect.addEventListener('change', function () {
+    projectHidden.value = projectSelect.value;
+    // Reset roles when project changes
+    roleSelect.innerHTML = '<option value="">— no role filter —</option>';
+  });
 
-  btn.addEventListener('click', function () {
-    btn.disabled = true;
-    btn.textContent = 'Loading\u2026';
-    errorDiv.style.display = 'none';
+  loadProjectsBtn.addEventListener('click', function () {
+    loadProjectsBtn.disabled = true;
+    loadProjectsBtn.textContent = 'Loading\u2026';
+    projectsErrorDiv.style.display = 'none';
 
     fetch('{{ url_for("tools.fetch_projects") }}', {
       method: 'POST',
@@ -92,26 +153,68 @@
         return r.json();
       })
       .then(function (projects) {
-        select.innerHTML = '';
+        projectSelect.innerHTML = '';
         if (projects.length === 0) {
-          select.innerHTML = '<option value="">No accessible projects found</option>';
+          projectSelect.innerHTML = '<option value="">No accessible projects found</option>';
         } else {
           projects.forEach(function (p) {
             const opt = document.createElement('option');
             opt.value = p.key;
             opt.textContent = p.key + ' \u2014 ' + p.name;
-            select.appendChild(opt);
+            projectSelect.appendChild(opt);
           });
-          hidden.value = select.value;
+          projectHidden.value = projectSelect.value;
         }
-        btn.textContent = 'Reload Projects';
+        loadProjectsBtn.textContent = 'Reload Projects';
+        // Reset roles when projects reload
+        roleSelect.innerHTML = '<option value="">— no role filter —</option>';
       })
       .catch(function (err) {
-        errorDiv.textContent = 'Failed to load projects: ' + err.message;
-        errorDiv.style.display = 'block';
-        btn.textContent = 'Load Projects';
+        projectsErrorDiv.textContent = 'Failed to load projects: ' + err.message;
+        projectsErrorDiv.style.display = 'block';
+        loadProjectsBtn.textContent = 'Load Projects';
       })
-      .finally(function () { btn.disabled = false; });
+      .finally(function () { loadProjectsBtn.disabled = false; });
+  });
+
+  loadRolesBtn.addEventListener('click', function () {
+    loadRolesBtn.disabled = true;
+    loadRolesBtn.textContent = 'Loading\u2026';
+    rolesErrorDiv.style.display = 'none';
+
+    const body = new FormData();
+    body.append('project_scope', projectHidden.value || projectSelect.value);
+
+    fetch('{{ url_for("tools.fetch_roles") }}', {
+      method: 'POST',
+      headers: { 'X-CSRFToken': csrfToken },
+      body: body,
+    })
+      .then(function (r) {
+        if (!r.ok) return r.json().then(function (d) { throw new Error(d.error || r.statusText); });
+        return r.json();
+      })
+      .then(function (roles) {
+        roleSelect.innerHTML = '<option value="">— no role filter —</option>';
+        if (roles.length === 0) {
+          rolesErrorDiv.textContent = 'No roles found for this project.';
+          rolesErrorDiv.style.display = 'block';
+        } else {
+          roles.forEach(function (role) {
+            const opt = document.createElement('option');
+            opt.value = role.id;
+            opt.textContent = role.name;
+            roleSelect.appendChild(opt);
+          });
+        }
+        loadRolesBtn.textContent = 'Reload Roles';
+      })
+      .catch(function (err) {
+        rolesErrorDiv.textContent = 'Failed to load roles: ' + err.message;
+        rolesErrorDiv.style.display = 'block';
+        loadRolesBtn.textContent = 'Load Roles';
+      })
+      .finally(function () { loadRolesBtn.disabled = false; });
   });
 })();
 </script>
