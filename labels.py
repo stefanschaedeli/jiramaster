@@ -1,7 +1,10 @@
 import json
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List
+
+log = logging.getLogger(__name__)
 
 _CACHE_FILE = Path(__file__).parent / "cache" / "labels.json"
 
@@ -12,7 +15,8 @@ def load_label_cache() -> List[str]:
         with open(_CACHE_FILE) as f:
             data = json.load(f)
         return data.get("items", [])
-    except Exception:
+    except Exception as exc:
+        log.warning("Could not load label cache %s: %s", _CACHE_FILE, exc)
         return []
 
 
@@ -21,7 +25,8 @@ def load_label_cache_meta() -> dict:
     try:
         with open(_CACHE_FILE) as f:
             return json.load(f)
-    except Exception:
+    except Exception as exc:
+        log.warning("Could not load label cache meta %s: %s", _CACHE_FILE, exc)
         return {"updated_at": None, "items": []}
 
 

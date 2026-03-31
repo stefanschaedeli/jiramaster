@@ -270,7 +270,7 @@ class JiraClient:
             log.error("fetch_teams exception: %s", exc)
             return [], str(exc)
 
-    def fetch_team_members(self, team_id: str) -> Tuple[List[dict], Optional[str]]:
+    def fetch_team_members(self, team_id: str, max_results: int = 500) -> Tuple[List[dict], Optional[str]]:
         """Fetch members of an Atlassian Team.
 
         GET /gateway/api/public/teams/v1/org/{orgId}/teams/{teamId}/members
@@ -298,10 +298,10 @@ class JiraClient:
                     if account_id:
                         members.append({"accountId": account_id})
                 cursor = data.get("nextCursor")
-                if not cursor or not data.get("results"):
+                if not cursor or not data.get("results") or len(members) >= max_results:
                     break
             log.info("fetch_team_members: team_id=%r → %d members", team_id, len(members))
-            return members, None
+            return members[:max_results], None
         except requests.RequestException as exc:
             log.error("fetch_team_members exception: %s", exc)
             return [], str(exc)
