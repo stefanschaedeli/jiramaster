@@ -1,19 +1,31 @@
 import json
-import os
-from typing import List, Dict
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Dict, List
 
-ASSIGNEES_FILE = os.path.join(os.path.dirname(__file__), "assignees.json")
+_CACHE_FILE = Path(__file__).parent / "cache" / "assignees.json"
 
 
 def load_assignees() -> List[Dict]:
-    """Return cached list, or [] if file missing/corrupt."""
+    """Return cached assignee list, or [] if file missing/corrupt."""
     try:
-        with open(ASSIGNEES_FILE) as f:
-            return json.load(f)
+        with open(_CACHE_FILE) as f:
+            data = json.load(f)
+        return data.get("items", [])
     except Exception:
         return []
 
 
+def load_assignees_meta() -> dict:
+    """Return full cache wrapper {updated_at, items}, or defaults if missing."""
+    try:
+        with open(_CACHE_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {"updated_at": None, "items": []}
+
+
 def save_assignees(users: List[Dict]) -> None:
-    with open(ASSIGNEES_FILE, "w") as f:
-        json.dump(users, f, indent=2)
+    _CACHE_FILE.parent.mkdir(exist_ok=True)
+    with open(_CACHE_FILE, "w") as f:
+        json.dump({"updated_at": datetime.now(timezone.utc).isoformat(), "items": users}, f, indent=2)
