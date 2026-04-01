@@ -12,7 +12,7 @@ from typing import Optional
 
 log = logging.getLogger(__name__)
 
-_operations: dict[str, dict] = {}  # op_id -> {"queue": Queue, "created": float}
+_operations: dict[str, dict] = {}  # op_id -> {"queue": Queue, "created": float, "aborted": bool}
 _lock = threading.Lock()
 _TTL_SECONDS = 300  # 5 minutes
 
@@ -22,8 +22,25 @@ def create_operation() -> str:
     _cleanup_stale()
     op_id = str(uuid.uuid4())
     with _lock:
-        _operations[op_id] = {"queue": queue.Queue(), "created": time.time()}
+        _operations[op_id] = {"queue": queue.Queue(), "created": time.time(), "aborted": False}
     return op_id
+
+
+def abort_operation(op_id: str) -> bool:
+    """Signal an operation to abort. Returns True if the operation existed."""
+    with _lock:
+        op = _operations.get(op_id)
+        if op:
+            op["aborted"] = True
+            return True
+    return False
+
+
+def is_aborted(op_id: str) -> bool:
+    """Return True if the operation has been aborted."""
+    with _lock:
+        op = _operations.get(op_id)
+        return bool(op and op.get("aborted"))
 
 
 def emit_event(op_id: str, event: dict) -> None:

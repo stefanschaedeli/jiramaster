@@ -12,6 +12,7 @@ function startOperation(startUrl, formData, description, options) {
   options = options || {};
   var csrfToken = options.csrfToken || '';
   var eventsBaseUrl = options.eventsUrl || '';
+  var abortBaseUrl = options.abortUrl || '';
   var onComplete = options.onComplete || function() { location.reload(); };
 
   // Build overlay DOM
@@ -27,7 +28,8 @@ function startOperation(startUrl, formData, description, options) {
         '<div class="small text-muted mb-2">API Activity</div>' +
         '<div id="jm-overlay-log" class="jm-overlay-log"></div>' +
         '<div id="jm-overlay-summary" class="mt-3 fw-semibold" style="display:none"></div>' +
-        '<div class="mt-3 text-end">' +
+        '<div class="mt-3 d-flex justify-content-between align-items-center">' +
+          '<button id="jm-overlay-abort" class="btn btn-sm btn-outline-danger">Abort</button>' +
           '<button id="jm-overlay-close" class="btn btn-sm btn-outline-secondary" style="display:none">Close</button>' +
         '</div>' +
       '</div>' +
@@ -39,10 +41,15 @@ function startOperation(startUrl, formData, description, options) {
   var progressEl = document.getElementById('jm-overlay-progress');
   var summaryEl = document.getElementById('jm-overlay-summary');
   var closeBtn = document.getElementById('jm-overlay-close');
+  var abortBtn = document.getElementById('jm-overlay-abort');
 
   closeBtn.addEventListener('click', function() {
     overlay.remove();
   });
+
+  function hideAbortBtn() {
+    abortBtn.style.display = 'none';
+  }
 
   function appendLog(html) {
     logEl.innerHTML += html + '\n';
@@ -92,6 +99,17 @@ function startOperation(startUrl, formData, description, options) {
     .then(function(data) {
       if (data.error) throw new Error(data.error);
       var opId = data.operation_id;
+
+      // Wire abort button now that we have the op_id
+      abortBtn.addEventListener('click', function() {
+        abortBtn.disabled = true;
+        abortBtn.textContent = 'Aborting…';
+        fetch(abortBaseUrl + opId, {
+          method: 'POST',
+          headers: { 'X-CSRFToken': csrfToken }
+        }).catch(function() {});
+      });
+
       // Step 2: open SSE stream
       var eventSource = new EventSource(eventsBaseUrl + opId);
       eventSource.onmessage = function(e) {
@@ -106,6 +124,7 @@ function startOperation(startUrl, formData, description, options) {
           titleEl.textContent = evt.message || description;
         } else if (evt.type === 'complete') {
           eventSource.close();
+          hideAbortBtn();
           progressEl.classList.remove('progress-bar-striped', 'progress-bar-animated');
           progressEl.classList.add('bg-success');
           if (evt.summary) {
@@ -120,6 +139,7 @@ function startOperation(startUrl, formData, description, options) {
           closeBtn.onclick = function() { overlay.remove(); onComplete(evt); };
         } else if (evt.type === 'error') {
           eventSource.close();
+          hideAbortBtn();
           progressEl.classList.remove('progress-bar-striped', 'progress-bar-animated');
           progressEl.classList.add('bg-danger');
           summaryEl.textContent = evt.message || 'Operation failed';
@@ -132,6 +152,7 @@ function startOperation(startUrl, formData, description, options) {
       };
       eventSource.onerror = function() {
         eventSource.close();
+        hideAbortBtn();
         progressEl.classList.remove('progress-bar-striped', 'progress-bar-animated');
         progressEl.classList.add('bg-danger');
         summaryEl.textContent = 'Connection to server lost';
@@ -141,6 +162,7 @@ function startOperation(startUrl, formData, description, options) {
       };
     })
     .catch(function(err) {
+      hideAbortBtn();
       progressEl.classList.remove('progress-bar-striped', 'progress-bar-animated');
       progressEl.classList.add('bg-danger');
       summaryEl.textContent = err.message || 'Failed to start operation';

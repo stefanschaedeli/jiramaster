@@ -248,6 +248,7 @@
 (function() {
   var csrfToken = document.querySelector('#settingsForm input[name="csrf_token"]').value;
   var eventsUrl = '{{ url_for("settings.settings_events_stream", op_id="") }}';
+  var abortUrl = '{{ url_for("tools.abort_operation_route", op_id="") }}';
 
   function getFormData() {
     var fd = new FormData();
@@ -268,7 +269,7 @@
       '{{ url_for("settings.start_test_connection") }}',
       getFormData(),
       'Testing connection to Jira\u2026',
-      { csrfToken: csrfToken, eventsUrl: eventsUrl, onComplete: function() { location.reload(); } }
+      { csrfToken: csrfToken, eventsUrl: eventsUrl, abortUrl: abortUrl, onComplete: function() { location.reload(); } }
     );
   });
 
@@ -281,7 +282,7 @@
       '{{ url_for("settings.start_detect_fields") }}',
       fd,
       'Detecting Acceptance Criteria field\u2026',
-      { csrfToken: csrfToken, eventsUrl: eventsUrl, onComplete: function() { location.reload(); } }
+      { csrfToken: csrfToken, eventsUrl: eventsUrl, abortUrl: abortUrl, onComplete: function() { location.reload(); } }
     );
   });
 
@@ -294,7 +295,7 @@
       '{{ url_for("settings.start_detect_org_id") }}',
       fd,
       'Detecting Atlassian Organization ID\u2026',
-      { csrfToken: csrfToken, eventsUrl: eventsUrl, onComplete: function() { location.reload(); } }
+      { csrfToken: csrfToken, eventsUrl: eventsUrl, abortUrl: abortUrl, onComplete: function() { location.reload(); } }
     );
   });
 })();
