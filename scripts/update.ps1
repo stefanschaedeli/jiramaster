@@ -1,10 +1,9 @@
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 Set-Location (Split-Path $PSScriptRoot -Parent)
 
-# Ensure logs directory exists
+# Output goes to update.log via the caller's redirection (>> logs\update.log 2>&1).
+# Ensure the logs directory exists in case the script is run standalone.
 if (-not (Test-Path "logs")) { New-Item -ItemType Directory -Path "logs" | Out-Null }
-$updateLog = "logs\update.log"
-Start-Transcript -Path $updateLog -Append | Out-Null
 
 Write-Host ""
 Write-Host "=== JiraMaster update - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ==="
@@ -43,7 +42,6 @@ Write-Host "Fetching latest code from GitHub..."
 # Check git is available
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     Write-Host "ERROR: git not found on PATH. Please install Git for Windows." -ForegroundColor Red
-    Stop-Transcript | Out-Null
     exit 1
 }
 
@@ -69,5 +67,4 @@ if ($before -eq $after) {
 # --- Launch the app ---
 Write-Host ""
 Write-Host "Launching JiraMaster..."
-Stop-Transcript | Out-Null
 & "$PSScriptRoot\start.ps1"

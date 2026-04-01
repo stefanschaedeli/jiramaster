@@ -321,21 +321,22 @@ def update_and_restart():
     scripts_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "scripts")
     log_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs", "update.log")
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
-    log_file = open(log_path, "a")  # noqa: WPS515 — kept open; process takes ownership
 
     try:
         if sys.platform == "win32":
+            # On Windows, pass the log path as an env variable so update.ps1 can
+            # open it directly. Using cmd /c with shell I/O redirection avoids
+            # inheriting Python's file handle (which breaks with DETACHED_PROCESS).
             script = os.path.join(scripts_dir, "update.ps1")
-            cmd = ["powershell", "-ExecutionPolicy", "Bypass", "-File", script]
+            ps_cmd = f'powershell -ExecutionPolicy Bypass -File "{script}" >> "{log_path}" 2>&1'
             subprocess.Popen(
-                cmd,
-                stdout=log_file,
-                stderr=log_file,
+                ["cmd", "/c", ps_cmd],
                 creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
                 close_fds=True,
             )
         else:
             script = os.path.join(scripts_dir, "update.sh")
+            log_file = open(log_path, "a")  # noqa: WPS515 — child takes ownership
             subprocess.Popen(
                 ["bash", script],
                 stdout=log_file,
@@ -343,6 +344,7 @@ def update_and_restart():
                 start_new_session=True,
                 close_fds=True,
             )
+            log_file.close()
     except Exception as exc:
         log.exception("update_and_restart: failed to spawn update script: %s", exc)
         return jsonify({"error": str(exc)}), 500
