@@ -178,17 +178,19 @@ After finishing any logical unit of work (a fix, a feature, a refactor):
    - Breaking change → bump X
 4. `git tag -a vX.Y.Z -m "description"`
 5. `git push origin HEAD vX.Y.Z` — push branch AND tag together
+6. `gh release create vX.Y.Z --title "vX.Y.Z — short title" --notes "one-line summary"` — create a GitHub Release so it appears on the Releases page
 
-**Never push without the tag. Never tag without pushing it.**
+**Never push without the tag. Never tag without a GitHub Release.**
 
-> **CRITICAL — this has been missed repeatedly.** Steps 4 and 5 are NOT optional. Every single `git push` must be preceded by a `git tag` and must include the tag in the push command. The exact command is:
+> **CRITICAL — this has been missed repeatedly.** Steps 4–6 are NOT optional. The exact sequence is:
 > ```bash
 > git tag -a vX.Y.Z -m "short description"
 > git push origin HEAD vX.Y.Z
+> gh release create vX.Y.Z --title "vX.Y.Z — short title" --notes "one-line summary"
 > ```
-> A bare `git push` or `git push origin HEAD` without the tag name is WRONG.
+> A bare `git push` without the tag, or a tag without a `gh release create`, is WRONG.
 
-The `auto-commit.sh` Stop hook handles this automatically at session end — but for mid-task manual commits, you must do steps 3–5 yourself. The hook does not run between steps.
+The `auto-commit.sh` Stop hook handles this automatically at session end — but for mid-task manual commits, you must do steps 3–6 yourself. The hook does not run between steps.
 
 ## Rules
 
