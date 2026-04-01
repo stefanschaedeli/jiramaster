@@ -46,14 +46,23 @@
       </ul>
       <ul class="navbar-nav">
         <li class="nav-item">
-          <a class="nav-link {% if request.path.startswith('/settings') %}active{% endif %}"
-             href="{{ url_for('settings.index') }}" title="Settings">
-            {% if jira_configured %}
-              <span class="badge bg-success me-1">✓</span>
-            {% else %}
-              <span class="badge bg-warning text-dark me-1">!</span>
-            {% endif %}
-            ⚙
+          <a class="nav-link settings-gear-link {% if request.path.startswith('/settings') %}active{% endif %}"
+             href="{{ url_for('settings.index') }}" title="Settings" aria-label="Settings">
+            <span class="settings-gear-wrap{% if request.path.startswith('/settings') %} settings-gear-active{% endif %}">
+              {% if not jira_configured %}
+                <span class="settings-gear-dot settings-gear-dot--warn" aria-hidden="true"></span>
+              {% else %}
+                <span class="settings-gear-dot settings-gear-dot--ok" aria-hidden="true"></span>
+              {% endif %}
+              <svg class="settings-gear-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path fill-rule="evenodd" clip-rule="evenodd"
+                  d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm-2 4a2 2 0 1 1 4 0 2 2 0 0 1-4 0Z"
+                  fill="currentColor"/>
+                <path fill-rule="evenodd" clip-rule="evenodd"
+                  d="M9.394 2.276a1 1 0 0 1 .894-.276l1.356.226a.9.9 0 0 0 .712-.176l1.06-.848a1 1 0 0 1 1.236-.02l1.118.838a.9.9 0 0 0 .726.148l1.346-.27a1 1 0 0 1 1.07.538l.608 1.218a.9.9 0 0 0 .562.458l1.318.38a1 1 0 0 1 .7.956v1.272a.9.9 0 0 0 .318.692l1.006.838a1 1 0 0 1 .226 1.302l-.672 1.118a.9.9 0 0 0-.096.736l.38 1.314a1 1 0 0 1-.452 1.124l-1.106.664a.9.9 0 0 0-.45.638l-.226 1.356a1 1 0 0 1-.894.836l-1.368.114a.9.9 0 0 0-.664.386l-.76 1.09a1 1 0 0 1-1.24.32l-1.24-.558a.9.9 0 0 0-.738 0l-1.24.558a1 1 0 0 1-1.24-.32l-.76-1.09a.9.9 0 0 0-.664-.386l-1.368-.114a1 1 0 0 1-.894-.836l-.226-1.356a.9.9 0 0 0-.45-.638l-1.106-.664a1 1 0 0 1-.452-1.124l.38-1.314a.9.9 0 0 0-.096-.736L1.39 10.97a1 1 0 0 1 .226-1.302l1.006-.838A.9.9 0 0 0 2.94 8.138V6.866a1 1 0 0 1 .7-.956l1.318-.38a.9.9 0 0 0 .562-.458l.608-1.218a1 1 0 0 1 1.07-.538l1.346.27a.9.9 0 0 0 .726-.148l1.118-.838a1 1 0 0 1 .342-.324ZM12 4.06l-.948.712a2.9 2.9 0 0 1-2.338.476l-.936-.188-.422.846a2.9 2.9 0 0 1-1.81 1.476l-.916.264v.884a2.9 2.9 0 0 1-1.026 2.23l-.698.582.466.776a2.9 2.9 0 0 1 .31 2.374l-.264.912.768.462a2.9 2.9 0 0 1 1.45 2.056l.158.942.95.08a2.9 2.9 0 0 1 2.14 1.244l.528.756.86-.388a2.9 2.9 0 0 1 2.376 0l.86.388.528-.756a2.9 2.9 0 0 1 2.14-1.244l.95-.08.158-.942a2.9 2.9 0 0 1 1.45-2.056l.768-.462-.264-.912a2.9 2.9 0 0 1 .31-2.374l.466-.776-.698-.582A2.9 2.9 0 0 1 19.06 8.53v-.884l-.916-.264a2.9 2.9 0 0 1-1.81-1.476l-.422-.846-.936.188a2.9 2.9 0 0 1-2.338-.476L12 4.06Z"
+                  fill="currentColor"/>
+              </svg>
+            </span>
           </a>
         </li>
       </ul>
