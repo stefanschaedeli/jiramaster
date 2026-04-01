@@ -1,4 +1,5 @@
 import os
+import signal
 import subprocess
 import sys
 import threading
@@ -346,7 +347,22 @@ def update_and_restart():
         log.exception("update_and_restart: failed to spawn update script: %s", exc)
         return jsonify({"error": str(exc)}), 500
 
-    log.info("update_and_restart: detached update script spawned")
+    log.info("update_and_restart: detached update script spawned, scheduling self-shutdown in 2s")
+
+    def _shutdown():
+        import time
+        time.sleep(2)
+        log.info("update_and_restart: shutting down now")
+        # If running under Flask's debug reloader, also kill the parent (reloader) process
+        if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+            try:
+                os.kill(os.getppid(), signal.SIGTERM)
+            except (OSError, ProcessLookupError):
+                pass
+        os._exit(0)
+
+    threading.Thread(target=_shutdown, daemon=True).start()
+
     return jsonify({"ok": True})
 
 

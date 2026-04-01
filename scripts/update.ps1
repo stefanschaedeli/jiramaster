@@ -9,25 +9,33 @@ Start-Transcript -Path $updateLog -Append | Out-Null
 Write-Host ""
 Write-Host "=== JiraMaster update - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ==="
 
-# --- Stop any running JiraMaster instance (python app.py on port 5000) ---
-Write-Host "Stopping any running JiraMaster processes..."
-$killed = 0
-Get-Process -Name "python" -ErrorAction SilentlyContinue | ForEach-Object {
-    try {
-        $cmd = (Get-CimInstance Win32_Process -Filter "ProcessId = $($_.Id)" -ErrorAction SilentlyContinue).CommandLine
-        if ($cmd -match "app\.py") {
-            Write-Host "  Stopping PID $($_.Id): $cmd"
-            Stop-Process -Id $_.Id -Force
-            $killed++
+# --- Wait for JiraMaster to shut itself down (port 5000 to be free) ---
+Write-Host "Waiting for JiraMaster to shut down (port 5000)..."
+$waitSecs = 0
+$maxWait = 15
+while ($waitSecs -lt $maxWait) {
+    $listener = Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue
+    if (-not $listener) {
+        Write-Host "  Port 5000 is free."
+        break
+    }
+    Start-Sleep -Seconds 1
+    $waitSecs++
+    Write-Host "  Still waiting... (${waitSecs}s)"
+}
+
+if ($waitSecs -ge $maxWait) {
+    Write-Host "WARNING: Port 5000 still in use after ${maxWait}s. Attempting forced cleanup..." -ForegroundColor Yellow
+    $listener = Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue
+    if ($listener) {
+        $pids = $listener | Select-Object -ExpandProperty OwningProcess -Unique
+        foreach ($pid in $pids) {
+            Write-Host "  Killing PID $pid"
+            Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
         }
-    } catch {
-        # Process may have already exited
+        Start-Sleep -Seconds 1
     }
 }
-if ($killed -eq 0) { Write-Host "  No running JiraMaster process found." }
-
-# Give processes a moment to release file locks
-if ($killed -gt 0) { Start-Sleep -Seconds 1 }
 
 # --- Git update (overwrite local changes if needed) ---
 Write-Host "Fetching latest code from GitHub..."
@@ -58,9 +66,8 @@ if ($before -eq $after) {
     Write-Host "Update applied: $before -> $after"
 }
 
-Stop-Transcript | Out-Null
-
 # --- Launch the app ---
 Write-Host ""
 Write-Host "Launching JiraMaster..."
-& "$PSScriptRoot\start.bat"
+Stop-Transcript | Out-Null
+& "$PSScriptRoot\start.ps1"

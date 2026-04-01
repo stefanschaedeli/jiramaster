@@ -11,20 +11,28 @@ exec > >(tee -a "$UPDATE_LOG") 2>&1
 echo ""
 echo "=== JiraMaster update — $(date) ==="
 
-# --- Stop any running JiraMaster instance ---
-echo "Stopping any running JiraMaster processes..."
-KILLED=0
-while IFS= read -r pid; do
-    echo "  Stopping PID $pid"
-    kill -TERM "$pid" 2>/dev/null || true
-    KILLED=$((KILLED + 1))
-done < <(pgrep -f "python.*app\.py" 2>/dev/null || true)
-
-if [ "$KILLED" -eq 0 ]; then
-    echo "  No running JiraMaster process found."
-else
-    # Give processes a moment to release file locks
+# --- Wait for JiraMaster to shut itself down (port 5000 to be free) ---
+echo "Waiting for JiraMaster to shut down (port 5000)..."
+WAIT_SECS=0
+MAX_WAIT=15
+while [ "$WAIT_SECS" -lt "$MAX_WAIT" ]; do
+    if ! lsof -iTCP:5000 -sTCP:LISTEN -t >/dev/null 2>&1; then
+        echo "  Port 5000 is free."
+        break
+    fi
     sleep 1
+    WAIT_SECS=$((WAIT_SECS + 1))
+    echo "  Still waiting... (${WAIT_SECS}s)"
+done
+
+if [ "$WAIT_SECS" -ge "$MAX_WAIT" ]; then
+    echo "WARNING: Port 5000 still in use after ${MAX_WAIT}s. Attempting forced cleanup..."
+    PIDS=$(lsof -iTCP:5000 -sTCP:LISTEN -t 2>/dev/null || true)
+    if [ -n "$PIDS" ]; then
+        echo "  Killing PIDs: $PIDS"
+        echo "$PIDS" | xargs kill -9 2>/dev/null || true
+        sleep 1
+    fi
 fi
 
 # --- Git update ---
