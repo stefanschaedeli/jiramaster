@@ -129,6 +129,25 @@ See `.claude/rules/02-no-print-or-basicconfig.md` and `.claude/rules/04-logging-
 - `assignees.json` and `labels.json` are refreshed from Tools → "Refresh" buttons
 - SSL: `scripts/start.sh` (macOS) and `scripts/start.ps1` (Windows) merge system CA certs into certifi bundle; `jira_client.py` auto-detects via `REQUESTS_CA_BUNDLE` env var
 
+## Git Workflow
+
+**Every completed step must be committed, tagged, and pushed immediately** — not batched until session end.
+
+After finishing any logical unit of work (a fix, a feature, a refactor):
+
+1. `git add <files>` — stage the relevant files
+2. `git commit -m "type: description"` — commit with a conventional message
+3. Determine the version bump:
+   - Patch fix → bump Z (e.g. v1.8.4 → v1.8.5)
+   - New feature → bump Y (e.g. v1.8.x → v1.9.0)
+   - Breaking change → bump X
+4. `git tag -a vX.Y.Z -m "description"`
+5. `git push origin HEAD vX.Y.Z` — push branch AND tag together
+
+**Never push without the tag. Never tag without pushing it.**
+
+The `auto-commit.sh` Stop hook handles this automatically at session end — but for mid-task manual commits, you must do steps 3–5 yourself. The hook does not run between steps.
+
 ## Rules
 
 See `.claude/rules/` for all enforced development rules:
