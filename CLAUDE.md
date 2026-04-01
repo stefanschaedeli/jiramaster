@@ -181,6 +181,13 @@ After finishing any logical unit of work (a fix, a feature, a refactor):
 
 **Never push without the tag. Never tag without pushing it.**
 
+> **CRITICAL — this has been missed repeatedly.** Steps 4 and 5 are NOT optional. Every single `git push` must be preceded by a `git tag` and must include the tag in the push command. The exact command is:
+> ```bash
+> git tag -a vX.Y.Z -m "short description"
+> git push origin HEAD vX.Y.Z
+> ```
+> A bare `git push` or `git push origin HEAD` without the tag name is WRONG.
+
 The `auto-commit.sh` Stop hook handles this automatically at session end — but for mid-task manual commits, you must do steps 3–5 yourself. The hook does not run between steps.
 
 ## Rules
