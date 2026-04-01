@@ -1,8 +1,6 @@
 import os
-import signal
 import subprocess
 import sys
-import threading
 
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, session, Response
 import logging
@@ -319,52 +317,28 @@ def update_and_restart():
         return jsonify({"error": "Jira not configured"}), 400
 
     scripts_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "scripts")
-    log_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs", "update.log")
-    os.makedirs(os.path.dirname(log_path), exist_ok=True)
 
     try:
         if sys.platform == "win32":
-            # On Windows, pass the log path as an env variable so update.ps1 can
-            # open it directly. Using cmd /c with shell I/O redirection avoids
-            # inheriting Python's file handle (which breaks with DETACHED_PROCESS).
-            script = os.path.join(scripts_dir, "update.ps1")
-            ps_cmd = f'powershell -ExecutionPolicy Bypass -File "{script}" >> "{log_path}" 2>&1'
+            # Launch update.bat detached — it owns everything: killing this process,
+            # git pull, and restarting the app. No coordination needed from our side.
+            bat = os.path.join(scripts_dir, "update.bat")
             subprocess.Popen(
-                ["cmd", "/c", ps_cmd],
+                ["cmd", "/c", bat],
                 creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
-                close_fds=True,
             )
         else:
             script = os.path.join(scripts_dir, "update.sh")
-            log_file = open(log_path, "a")  # noqa: WPS515 — child takes ownership
             subprocess.Popen(
                 ["bash", script],
-                stdout=log_file,
-                stderr=log_file,
                 start_new_session=True,
                 close_fds=True,
             )
-            log_file.close()
     except Exception as exc:
         log.exception("update_and_restart: failed to spawn update script: %s", exc)
         return jsonify({"error": str(exc)}), 500
 
-    log.info("update_and_restart: detached update script spawned, scheduling self-shutdown in 2s")
-
-    def _shutdown():
-        import time
-        time.sleep(2)
-        log.info("update_and_restart: shutting down now")
-        # If running under Flask's debug reloader, also kill the parent (reloader) process
-        if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
-            try:
-                os.kill(os.getppid(), signal.SIGTERM)
-            except (OSError, ProcessLookupError):
-                pass
-        os._exit(0)
-
-    threading.Thread(target=_shutdown, daemon=True).start()
-
+    log.info("update_and_restart: update script launched, browser will poll for restart")
     return jsonify({"ok": True})
 
 
