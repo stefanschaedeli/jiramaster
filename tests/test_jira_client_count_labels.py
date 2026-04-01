@@ -36,7 +36,7 @@ class TestCountLabelUsage:
         assert results == [{"name": "alpha", "count": 3}, {"name": "beta", "count": 3}]
         for c in mock_req.call_args_list:
             assert c.args[0] == "GET"
-            assert c.args[1].endswith("/search")
+            assert c.args[1].endswith("/search/jql")
 
     def test_uses_search_endpoint(self, cfg):
         """Must call /rest/api/3/search, not /rest/api/3/issue/search."""
@@ -46,7 +46,7 @@ class TestCountLabelUsage:
             client.count_label_usage(["foo"])
 
         url = mock_req.call_args_list[0].args[1]
-        assert url.endswith("/search")
+        assert url.endswith("/search/jql")
         assert "issue/search" not in url
 
     def test_special_char_labels(self, cfg):
