@@ -35,6 +35,7 @@ def index():
     cfg = load_config()
     assignees = load_assignees()
     label_cache = load_label_cache()
+    label_cache_rich = load_label_cache_rich()
     projects_cache = load_projects()
     selected_project = session.get("tools_last_project")
     selected_label_project = session.get("tools_last_label_project")
@@ -42,6 +43,7 @@ def index():
         "tools/index.html",
         assignees=assignees,
         label_cache=label_cache,
+        label_cache_rich=label_cache_rich,
         projects_cache=projects_cache,
         cfg=cfg,
         selected_project=selected_project,
@@ -505,4 +507,66 @@ def _run_refresh_labels(cfg, op_id, params):
         })
     except Exception as exc:
         log.exception("_run_refresh_labels failed: %s", exc)
+        emit_event(op_id, {"type": "error", "message": str(exc)})
+
+
+@bp.route("/start-count-label-usage", methods=["POST"])
+def start_count_label_usage():
+    """Count how many issues use each cached label; update counts in cache.
+
+    Runs in a background thread and streams progress via SSE.
+    Optional form field: label_project_scope (project key to scope JQL).
+    """
+    cfg = load_config()
+    if not cfg.is_configured():
+        return jsonify({"error": "Jira not configured"}), 400
+
+    labels = load_label_cache()
+    if not labels:
+        return jsonify({"error": "No labels in cache — refresh labels first"}), 400
+
+    project_scope = request.form.get("label_project_scope", "").strip().upper() or None
+
+    op_id = create_operation()
+    params = {"labels": labels, "project_scope": project_scope}
+    thread = threading.Thread(
+        target=_run_count_label_usage, args=(cfg, op_id, params), daemon=True
+    )
+    thread.start()
+    return jsonify({"operation_id": op_id})
+
+
+def _run_count_label_usage(cfg, op_id, params):
+    """Background worker: count issue usage per cached label and save results."""
+    try:
+        callback = lambda evt: emit_event(op_id, evt)
+        client = JiraClient(cfg, verbose=True, event_callback=callback,
+                            abort_check=lambda: is_aborted(op_id))
+
+        def emit_status(msg):
+            emit_event(op_id, {"type": "status", "message": msg})
+
+        try:
+            counted, err = client.count_label_usage(
+                labels=params["labels"],
+                project_key=params["project_scope"],
+                emit=emit_status,
+            )
+        except OperationAbortedError:
+            emit_event(op_id, {"type": "error", "message": "Operation aborted"})
+            return
+
+        if err:
+            emit_event(op_id, {"type": "error", "message": f"Failed to count labels: {err}"})
+            return
+
+        save_label_cache(counted)
+        scope_label = params["project_scope"] or "all projects"
+        emit_event(op_id, {
+            "type": "complete",
+            "message": "Label usage count complete",
+            "summary": f"Updated counts for {len(counted)} labels ({scope_label})",
+        })
+    except Exception as exc:
+        log.exception("_run_count_label_usage failed: %s", exc)
         emit_event(op_id, {"type": "error", "message": str(exc)})

@@ -735,6 +735,59 @@ class JiraClient:
             log.error("fetch_labels exception: %s", exc)
             return [], str(exc)
 
+    def count_label_usage(
+        self,
+        labels: List[str],
+        project_key: Optional[str] = None,
+        emit: Optional[Callable[[str], None]] = None,
+    ) -> Tuple[List[dict], Optional[str]]:
+        """Count how many issues use each label and return [{name, count}] list.
+
+        Makes one API call per label (GET /rest/api/3/search with maxResults=1
+        to read the `total` field). Intentionally bounded by the cached label set
+        (typically 5–200 labels).
+
+        project_key: if set, scopes the JQL to that project only.
+        emit: optional callable(str) for progress status messages.
+        Returns (label_list, error_message).
+        """
+        def _emit(msg: str) -> None:
+            if emit:
+                emit(msg)
+
+        results: List[dict] = []
+        try:
+            total = len(labels)
+            for i, lbl in enumerate(labels, 1):
+                if self._abort_check and self._abort_check():
+                    raise OperationAbortedError()
+                if project_key:
+                    jql = f'project = "{project_key}" AND labels = "{lbl}"'
+                else:
+                    jql = f'labels = "{lbl}"'
+                resp = self._request(
+                    "GET", self._url("issue/search"),
+                    label="count_label_usage",
+                    params={"jql": jql, "maxResults": 1, "fields": "summary"},
+                    timeout=10,
+                )
+                if resp.status_code == 200:
+                    count = resp.json().get("total", 0)
+                else:
+                    count = 0
+                    log.warning("count_label_usage: %r → HTTP %d", lbl, resp.status_code)
+                results.append({"name": lbl, "count": count})
+                log.debug("count_label_usage: %r → %d issues", lbl, count)
+                if i % 5 == 0 or i == total:
+                    _emit(f"Counted {i}/{total} labels\u2026")
+            log.info("count_label_usage: counted %d labels", len(results))
+            return results, None
+        except OperationAbortedError:
+            raise
+        except requests.RequestException as exc:
+            log.error("count_label_usage exception: %s", exc)
+            return [], str(exc)
+
     def test_connection(self) -> Tuple[bool, str]:
         try:
             resp = self._request("GET", self._url("myself"), label="test_connection", timeout=10)
