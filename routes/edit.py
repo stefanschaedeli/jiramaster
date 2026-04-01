@@ -1,9 +1,11 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, session
+from flask import Blueprint, render_template, request, flash, redirect, url_for, session, jsonify
 
 from models import Epic, Story
 from assignees import load_assignees
 from labels import load_label_cache
 from work_store import load_epics, save_epics, get_session_work_id
+from config import load_config
+from jira_client import JiraClient
 
 bp = Blueprint("edit", __name__, url_prefix="/edit")
 
@@ -23,6 +25,37 @@ def index():
     label_cache = load_label_cache()
     return render_template("edit/index.html", epics=epics, enumerate=enumerate,
                            assignees=assignees, label_cache=label_cache)
+
+
+@bp.route("/assignees")
+def assignees_search():
+    """Live assignee search — proxies Jira API with a query string.
+
+    GET /edit/assignees?q=<term>
+    Returns JSON [{accountId, displayName, emailAddress}].
+    Falls back to cached list when Jira is not configured.
+    """
+    q = request.args.get("q", "").strip()
+    if not q:
+        return jsonify([])
+
+    cfg = load_config()
+    if not cfg.is_configured():
+        # Return cache filtered by query so the UI still works offline
+        cached = load_assignees()
+        term = q.lower()
+        matches = [
+            u for u in cached
+            if term in u.get("displayName", "").lower() or term in u.get("emailAddress", "").lower()
+        ]
+        return jsonify(matches[:10])
+
+    client = JiraClient(cfg)
+    users, err = client.fetch_assignees(query=q, max_results=10)
+    if err:
+        # Degrade gracefully — return empty list rather than a 5xx
+        return jsonify([])
+    return jsonify(users)
 
 
 @bp.route("/save", methods=["POST"])

@@ -53,10 +53,8 @@
             </div>
             <div class="col-md-4">
               <label class="form-label fw-semibold">Assignee</label>
-              {% if assignees %}
               <input type="text" class="form-control form-control-sm mb-1 assignee-search"
                      placeholder="Search assignees…" autocomplete="off">
-              {% endif %}
               <select name="epic_{{ i }}_assignee" class="form-select assignee-select">
                 <option value="">— unassigned —</option>
                 {% for u in assignees %}
@@ -66,9 +64,6 @@
                   </option>
                 {% endfor %}
               </select>
-              {% if not assignees %}
-              <div class="form-text text-warning">No assignees cached — go to <a href="{{ url_for('tools.index') }}">Jira Tools</a> → Refresh Assignees</div>
-              {% endif %}
             </div>
             <div class="col-md-2">
               <label class="form-label fw-semibold">Status</label>
@@ -136,10 +131,8 @@
               </div>
               <div class="col-md-4">
                 <label class="form-label small fw-semibold">Assignee</label>
-                {% if assignees %}
                 <input type="text" class="form-control form-control-sm mb-1 assignee-search"
                        placeholder="Search assignees…" autocomplete="off">
-                {% endif %}
                 <select name="story_{{ i }}_{{ j }}_assignee" class="form-select form-select-sm assignee-select">
                   <option value="">— unassigned —</option>
                   {% for u in assignees %}
@@ -149,9 +142,6 @@
                     </option>
                   {% endfor %}
                 </select>
-                {% if not assignees %}
-                <div class="form-text text-warning">No assignees cached — go to <a href="{{ url_for('tools.index') }}">Jira Tools</a> → Refresh Assignees</div>
-                {% endif %}
               </div>
               <div class="col-md-2">
                 <label class="form-label small fw-semibold">Status</label>
@@ -240,23 +230,75 @@
       container.querySelectorAll('select[name^="story_' + epicIndex + '_"]').forEach(function (storySelect) {
         if (/^story_\d+_\d+_assignee$/.test(storySelect.name) && storySelect.value === '') {
           storySelect.value = epicValue;
-          clearAssigneeSearch(storySelect); // reveal cascaded selection in search-filtered dropdowns
+          clearAssigneeSearch(storySelect);
         }
       });
     });
   });
 
-  // Live search filter for assignee dropdowns
+  // Add a result from a live API search to the select (deduplicates by value)
+  function addLiveOption(select, user) {
+    var displayName = user.displayName || '';
+    var email = user.emailAddress || '';
+    var label = displayName + (email ? ' (' + email + ')' : '');
+    for (var i = 0; i < select.options.length; i++) {
+      if (select.options[i].value === displayName) { return; } // already present
+    }
+    var opt = document.createElement('option');
+    opt.value = displayName;
+    opt.textContent = label;
+    opt.dataset.live = '1'; // mark as dynamically added
+    select.appendChild(opt);
+  }
+
+  // Remove previously added live options (keeps cache options intact)
+  function purgeLiveOptions(select) {
+    var toRemove = [];
+    Array.prototype.forEach.call(select.options, function (opt) {
+      if (opt.dataset.live === '1' && !opt.selected) { toRemove.push(opt); }
+    });
+    toRemove.forEach(function (opt) { opt.parentNode.removeChild(opt); });
+  }
+
+  // Live search: filter cache first; if fewer than 3 visible matches and query >= 2 chars, call API
   function initAssigneeSearch(searchInput) {
     var select = searchInput.closest('[class*="col-"]').querySelector('.assignee-select');
     if (!select) { return; }
+
+    var debounceTimer = null;
+
     searchInput.addEventListener('input', function () {
       var term = searchInput.value.toLowerCase();
+
+      // Always filter cached options
+      var visibleCount = 0;
       Array.prototype.forEach.call(select.options, function (opt) {
-        if (opt.value === '') { return; } // always show "— unassigned —"
-        // Keep selected option visible even when it doesn't match the search term
-        opt.style.display = (opt.selected || opt.textContent.toLowerCase().indexOf(term) !== -1) ? '' : 'none';
+        if (opt.value === '') { return; } // always show unassigned
+        var matches = opt.selected || opt.textContent.toLowerCase().indexOf(term) !== -1;
+        opt.style.display = matches ? '' : 'none';
+        if (matches && opt.value !== '') { visibleCount++; }
       });
+
+      // Fire live API search when cache comes up short
+      clearTimeout(debounceTimer);
+      if (term.length >= 2 && visibleCount < 3) {
+        debounceTimer = setTimeout(function () {
+          fetch('{{ url_for("edit.assignees_search") }}?q=' + encodeURIComponent(searchInput.value))
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (users) {
+              purgeLiveOptions(select);
+              users.forEach(function (u) { addLiveOption(select, u); });
+              // Re-apply current filter to newly added options
+              Array.prototype.forEach.call(select.options, function (opt) {
+                if (opt.value === '' || !opt.dataset.live) { return; }
+                opt.style.display = opt.textContent.toLowerCase().indexOf(term) !== -1 ? '' : 'none';
+              });
+            })
+            .catch(function () {}); // silently ignore network errors
+        }, 300);
+      } else if (term.length < 2) {
+        purgeLiveOptions(select);
+      }
     });
   }
   document.querySelectorAll('.assignee-search').forEach(initAssigneeSearch);
