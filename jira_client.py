@@ -607,26 +607,52 @@ class JiraClient:
             log.error("fetch_label_names exception: %s", exc)
             return [], str(exc)
 
+    def fetch_label_suggestions(self, prefix: str) -> Tuple[List[str], Optional[str]]:
+        """Return label names matching a prefix via Jira's JQL autocomplete API.
+
+        Uses GET /rest/api/3/jql/autocompletedata/suggestions?fieldName=labels&fieldValue=<prefix>
+        for server-side prefix matching — single API call, no pagination needed.
+        Returns (label_list, error_message).
+        """
+        try:
+            resp = self._request(
+                "GET", self._url("jql/autocompletedata/suggestions"),
+                label="fetch_label_suggestions",
+                params={"fieldName": "labels", "fieldValue": prefix},
+                timeout=10,
+            )
+            if resp.status_code != 200:
+                return [], self._log_error("fetch_label_suggestions", resp)
+            results = resp.json().get("results", [])
+            # Strip surrounding quotes that Jira adds for labels containing spaces
+            labels = [r["value"].strip('"') for r in results if r.get("value")]
+            log.info("fetch_label_suggestions: prefix=%r → %d matches", prefix, len(labels))
+            return labels, None
+        except requests.RequestException as exc:
+            log.error("fetch_label_suggestions exception: %s", exc)
+            return [], str(exc)
+
     def fetch_labels(
         self,
         top_n: int = 40,
         project_key: Optional[str] = None,
         name_filter: Optional[str] = None,
-        min_usage: int = 0,
         emit: Optional[Callable[[str], None]] = None,
-    ) -> Tuple[List[str], Optional[str]]:
-        """Return the top_n most-used labels, with optional filtering.
+    ) -> Tuple[List[dict], Optional[str]]:
+        """Return the top_n labels as [{name, count}] dicts, with optional filtering.
 
-        When project_key is set: uses JQL to find labels used in that project
-        (efficient — avoids the N+1 per-label counting pattern).
-        When project_key is None: fetches all labels globally then counts each
-        via individual JQL queries (existing behaviour, preserved for backward compat).
+        When project_key is set: scans issues via JQL to count label frequency
+        (efficient — single paginated query, returns counts).
+        When project_key is None and name_filter is set: uses the JQL autocomplete
+        suggestions API for server-side prefix matching (single API call, no counts).
+        When project_key is None and no filter: fetches all label names alphabetically
+        (paginated, no counts).
 
-        name_filter: case-insensitive substring filter on label name.
-        min_usage: discard labels used on fewer than this many issues.
+        name_filter: prefix filter on label name (server-side when no project scope).
         emit: optional callable(str) for progress status messages.
 
         Returns (label_list, error_message). label_list is [] on failure.
+        Each item is {"name": str, "count": int | None}.
         """
         from collections import Counter
 
@@ -635,11 +661,10 @@ class JiraClient:
                 emit(msg)
 
         try:
-            counts: Counter = Counter()
-
             if project_key:
-                # Project-scoped path: query issues with labels in this project,
+                # Project-scoped path: scan issues with labels in this project,
                 # count frequency from issue.fields.labels — single paginated query.
+                counts: Counter = Counter()
                 _emit(f"Fetching labels used in project {project_key}...")
                 jql = f'project = "{project_key}" AND labels is not EMPTY'
                 start_at = 0
@@ -674,45 +699,38 @@ class JiraClient:
                     _emit(f"Scanned {issues_scanned} issues, found {len(counts)} unique labels so far...")
                 log.info("fetch_labels: project=%r scanned %d issues, %d unique labels",
                          project_key, issues_scanned, len(counts))
-            else:
-                # Global path: fetch all label names, then count each via individual JQL
-                _emit("Fetching all labels from Jira...")
-                all_labels, err = self.fetch_label_names()
+
+                # Apply name filter client-side for project-scoped path
+                if name_filter:
+                    nf = name_filter.lower()
+                    counts = Counter({lbl: n for lbl, n in counts.items() if lbl.lower().startswith(nf)})
+                    log.info("fetch_labels: after name_filter=%r → %d labels", name_filter, len(counts))
+
+                labels = [{"name": lbl, "count": n} for lbl, n in counts.most_common(top_n)]
+                log.info("fetch_labels: returning %d labels (project-scoped, with counts)", len(labels))
+                return labels, None
+
+            elif name_filter:
+                # Global path with prefix filter: use autocomplete suggestions API
+                _emit(f"Fetching labels with prefix '{name_filter}' from Jira...")
+                names, err = self.fetch_label_suggestions(name_filter)
                 if err:
                     return [], err
-                log.info("fetch_labels: %d total labels found, sampling frequency", len(all_labels))
-                _emit(f"Found {len(all_labels)} labels, counting usage...")
-                for lbl in all_labels:
-                    resp = self._request(
-                        "GET", self._url("issue/search"),
-                        label="fetch_labels:count",
-                        params={
-                            "jql": f'labels = "{lbl}"',
-                            "fields": "summary",
-                            "maxResults": 1,
-                        },
-                        timeout=10,
-                    )
-                    if resp.status_code == 200:
-                        counts[lbl] = resp.json().get("total", 0)
-                        log.debug("fetch_labels: %r → %d issues", lbl, counts[lbl])
-                    else:
-                        counts[lbl] = 0
+                labels = [{"name": lbl, "count": None} for lbl in names[:top_n]]
+                log.info("fetch_labels: returning %d labels (global prefix filter)", len(labels))
+                return labels, None
 
-            # Apply name filter
-            if name_filter:
-                nf = name_filter.lower()
-                counts = Counter({lbl: n for lbl, n in counts.items() if nf in lbl.lower()})
-                log.info("fetch_labels: after name_filter=%r → %d labels", name_filter, len(counts))
+            else:
+                # Global path without filter: fetch all label names alphabetically
+                _emit("Fetching all labels from Jira...")
+                all_names, err = self.fetch_label_names()
+                if err:
+                    return [], err
+                labels = [{"name": lbl, "count": None} for lbl in all_names[:top_n]]
+                log.info("fetch_labels: returning %d of %d labels (global, no counts)",
+                         len(labels), len(all_names))
+                return labels, None
 
-            # Apply min_usage threshold
-            if min_usage > 0:
-                counts = Counter({lbl: n for lbl, n in counts.items() if n >= min_usage})
-                log.info("fetch_labels: after min_usage=%d → %d labels", min_usage, len(counts))
-
-            labels = [lbl for lbl, _ in counts.most_common(top_n)]
-            log.info("fetch_labels: returning top %d by usage", len(labels))
-            return labels, None
         except requests.RequestException as exc:
             log.error("fetch_labels exception: %s", exc)
             return [], str(exc)

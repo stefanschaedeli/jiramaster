@@ -9,7 +9,7 @@ import logging
 from config import load_config
 from jira_client import JiraClient, OperationAbortedError
 from assignees import load_assignees, save_assignees
-from labels import load_label_cache, save_label_cache
+from labels import load_label_cache, load_label_cache_rich, save_label_cache
 from projects import load_projects, save_projects
 from operation_events import create_operation, emit_event, stream_events, abort_operation, is_aborted
 
@@ -248,10 +248,11 @@ def add_label():
     if not label:
         flash("Label cannot be empty.", "warning")
         return redirect(url_for("tools.index"))
-    current = load_label_cache()
-    if label not in current:
-        current.append(label)
-        current.sort(key=str.lower)
+    current = load_label_cache_rich()
+    existing_names = [item["name"] for item in current]
+    if label not in existing_names:
+        current.append({"name": label, "count": None})
+        current.sort(key=lambda x: x["name"].lower())
         save_label_cache(current)
         flash(f"Label '{label}' added to cache.", "success")
     else:
@@ -262,10 +263,10 @@ def add_label():
 @bp.route("/remove-label", methods=["POST"])
 def remove_label():
     label = request.form.get("label", "").strip()
-    current = load_label_cache()
-    if label in current:
-        current.remove(label)
-        save_label_cache(current)
+    current = load_label_cache_rich()
+    filtered = [item for item in current if item["name"] != label]
+    if len(filtered) < len(current):
+        save_label_cache(filtered)
         flash(f"Label '{label}' removed from cache.", "success")
     else:
         flash(f"Label '{label}' not found in cache.", "warning")
@@ -283,28 +284,22 @@ def refresh_labels():
     session["tools_last_label_project"] = project_scope or cfg.project_key
     name_filter = request.form.get("label_name_filter", "").strip() or None
     top_n_raw = request.form.get("label_top_n", "40").strip()
-    min_usage_raw = request.form.get("label_min_usage", "0").strip()
     try:
         top_n = max(5, min(200, int(top_n_raw)))
     except ValueError:
         top_n = 40
-    try:
-        min_usage = max(0, int(min_usage_raw))
-    except ValueError:
-        min_usage = 0
 
     client = JiraClient(cfg, verbose=cfg.verbose_logging)
     fetched, err = client.fetch_labels(
         top_n=top_n,
         project_key=project_scope,
         name_filter=name_filter,
-        min_usage=min_usage,
     )
     if err:
         flash(f"Failed to fetch labels: {err}", "danger")
     else:
         save_label_cache(fetched)
-        flash(f"Saved top {len(fetched)} most-used labels to labels.json.", "success")
+        flash(f"Saved {len(fetched)} labels to cache.", "success")
     return redirect(url_for("tools.index"))
 
 
@@ -460,22 +455,16 @@ def start_refresh_labels():
     session["tools_last_label_project"] = project_scope or cfg.project_key
     name_filter = request.form.get("label_name_filter", "").strip() or None
     top_n_raw = request.form.get("label_top_n", "40").strip()
-    min_usage_raw = request.form.get("label_min_usage", "0").strip()
     try:
         top_n = max(5, min(200, int(top_n_raw)))
     except ValueError:
         top_n = 40
-    try:
-        min_usage = max(0, int(min_usage_raw))
-    except ValueError:
-        min_usage = 0
 
     op_id = create_operation()
     params = {
         "project_scope": project_scope,
         "name_filter": name_filter,
         "top_n": top_n,
-        "min_usage": min_usage,
     }
     thread = threading.Thread(
         target=_run_refresh_labels, args=(cfg, op_id, params), daemon=True
@@ -499,7 +488,6 @@ def _run_refresh_labels(cfg, op_id, params):
                 top_n=params["top_n"],
                 project_key=params["project_scope"],
                 name_filter=params["name_filter"],
-                min_usage=params["min_usage"],
                 emit=emit_status,
             )
         except OperationAbortedError:
@@ -513,7 +501,7 @@ def _run_refresh_labels(cfg, op_id, params):
         emit_event(op_id, {
             "type": "complete",
             "message": "Label refresh complete",
-            "summary": f"Saved top {len(fetched)} most-used labels",
+            "summary": f"Saved {len(fetched)} labels to cache",
         })
     except Exception as exc:
         log.exception("_run_refresh_labels failed: %s", exc)

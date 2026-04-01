@@ -1,5 +1,3 @@
-import time
-
 from flask import Blueprint, render_template, request, flash, redirect, url_for, session, jsonify
 
 from models import Epic, Story
@@ -9,9 +7,6 @@ from work_store import load_epics, save_epics, get_session_work_id
 from config import load_config
 from jira_client import JiraClient
 
-# In-memory TTL cache for full Jira label name list (avoids repeated fetches during an edit session)
-_label_names_cache: dict = {"timestamp": float("-inf"), "labels": []}
-_LABEL_NAMES_TTL = 60.0  # seconds
 
 bp = Blueprint("edit", __name__, url_prefix="/edit")
 
@@ -69,31 +64,28 @@ def labels_search():
     """Live label search — returns JSON list of label strings.
 
     GET /edit/labels?q=<term>
-    Searches the cached label list first; falls back to a Jira API fetch
-    (with a 60-second in-memory TTL) when cache results are insufficient.
+    Searches the cached label list first (prefix match); falls back to the Jira
+    autocomplete suggestions API for prefix-based server-side matching when
+    cache results are insufficient.
     """
     q = request.args.get("q", "").strip()
     if not q:
         return jsonify([])
 
-    term = q.lower()
+    prefix = q.lower()
     cached = load_label_cache()
-    matches = [lbl for lbl in cached if term in lbl.lower()]
+    matches = [lbl for lbl in cached if lbl.lower().startswith(prefix)]
 
     cfg = load_config()
     if cfg.is_configured() and len(matches) < 10:
-        global _label_names_cache
-        now = time.monotonic()
-        if now - _label_names_cache["timestamp"] > _LABEL_NAMES_TTL:
-            client = JiraClient(cfg)
-            all_names, err = client.fetch_label_names()
-            if not err:
-                _label_names_cache = {"timestamp": now, "labels": all_names}
-        for lbl in _label_names_cache["labels"]:
-            if term in lbl.lower() and lbl not in matches:
-                matches.append(lbl)
-                if len(matches) >= 20:
-                    break
+        client = JiraClient(cfg)
+        suggested, err = client.fetch_label_suggestions(q)
+        if not err:
+            for lbl in suggested:
+                if lbl not in matches:
+                    matches.append(lbl)
+                    if len(matches) >= 20:
+                        break
 
     return jsonify(matches[:20])
 

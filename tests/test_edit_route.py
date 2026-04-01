@@ -9,6 +9,7 @@ from unittest.mock import patch, MagicMock
 # ---------------------------------------------------------------------------
 
 def _write_label_cache(cache_file, labels):
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
     cache_file.write_text(json.dumps({"updated_at": "2026-01-01T00:00:00+00:00", "items": labels}))
 
 
@@ -50,14 +51,16 @@ def test_labels_search_no_query_param(client):
 # ---------------------------------------------------------------------------
 
 def test_labels_search_matches_cache(app, client, tmp_path, monkeypatch):
+    """Prefix match: 'back' should match 'backend' but not 'frontend'."""
     cache_file = tmp_path / "cache" / "labels.json"
-    _write_label_cache(cache_file, ["backend", "frontend", "urgent", "database"])
+    _write_label_cache(cache_file, ["backend", "frontend", "urgent", "backlog"])
 
-    resp = client.get("/edit/labels?q=end")
+    resp = client.get("/edit/labels?q=back")
     assert resp.status_code == 200
     result = resp.get_json()
     assert "backend" in result
-    assert "frontend" in result
+    assert "backlog" in result
+    assert "frontend" not in result
     assert "urgent" not in result
 
 
@@ -79,7 +82,7 @@ def test_labels_search_no_cache_match_returns_empty_when_unconfigured(client):
 
 
 # ---------------------------------------------------------------------------
-# Live Jira fallback when cache has few matches
+# Live Jira fallback when cache has few matches (uses fetch_label_suggestions)
 # ---------------------------------------------------------------------------
 
 def test_labels_search_live_fallback_when_cache_insufficient(app, client, tmp_path, monkeypatch):
@@ -91,12 +94,9 @@ def test_labels_search_live_fallback_when_cache_insufficient(app, client, tmp_pa
     _write_label_cache(cache_file, ["backend"])  # only 1 match < 10 threshold
 
     mock_client = MagicMock()
-    mock_client.fetch_label_names.return_value = (
+    mock_client.fetch_label_suggestions.return_value = (
         ["backend", "backend-api", "backend-db", "backlog"], None
     )
-
-    import routes.edit as edit_module
-    edit_module._label_names_cache = {"timestamp": float("-inf"), "labels": []}
 
     with patch("routes.edit.JiraClient", return_value=mock_client):
         resp = client.get("/edit/labels?q=back")
@@ -118,10 +118,7 @@ def test_labels_search_deduplicates_cache_and_live(app, client, tmp_path, monkey
 
     mock_client = MagicMock()
     # "backend" appears in both cache and live results — must not be duplicated
-    mock_client.fetch_label_names.return_value = (["backend", "backend-api"], None)
-
-    import routes.edit as edit_module
-    edit_module._label_names_cache = {"timestamp": float("-inf"), "labels": []}
+    mock_client.fetch_label_suggestions.return_value = (["backend", "backend-api"], None)
 
     with patch("routes.edit.JiraClient", return_value=mock_client):
         resp = client.get("/edit/labels?q=back")
@@ -140,10 +137,7 @@ def test_labels_search_caps_at_20(app, client, tmp_path, monkeypatch):
     _write_label_cache(cache_file, [f"label-{i}" for i in range(5)])
 
     mock_client = MagicMock()
-    mock_client.fetch_label_names.return_value = ([f"label-{i}" for i in range(30)], None)
-
-    import routes.edit as edit_module
-    edit_module._label_names_cache = {"timestamp": float("-inf"), "labels": []}
+    mock_client.fetch_label_suggestions.return_value = ([f"label-{i}" for i in range(30)], None)
 
     with patch("routes.edit.JiraClient", return_value=mock_client):
         resp = client.get("/edit/labels?q=label")
@@ -161,10 +155,7 @@ def test_labels_search_live_error_returns_cache_results(app, client, tmp_path, m
     _write_label_cache(cache_file, ["backend"])
 
     mock_client = MagicMock()
-    mock_client.fetch_label_names.return_value = ([], "connection error")
-
-    import routes.edit as edit_module
-    edit_module._label_names_cache = {"timestamp": float("-inf"), "labels": []}
+    mock_client.fetch_label_suggestions.return_value = ([], "connection error")
 
     with patch("routes.edit.JiraClient", return_value=mock_client):
         resp = client.get("/edit/labels?q=back")
@@ -185,12 +176,9 @@ def test_labels_search_no_live_fallback_when_cache_has_10_plus(app, client, tmp_
 
     mock_client = MagicMock()
 
-    import routes.edit as edit_module
-    edit_module._label_names_cache = {"timestamp": float("-inf"), "labels": []}
-
     with patch("routes.edit.JiraClient", return_value=mock_client):
         resp = client.get("/edit/labels?q=back")
 
     # Cache already has >= 10 matches — live API should NOT be called
-    mock_client.fetch_label_names.assert_not_called()
+    mock_client.fetch_label_suggestions.assert_not_called()
     assert resp.status_code == 200

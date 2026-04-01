@@ -38,7 +38,7 @@ def delete_item(cache_type: str, item_id: str):
         save_assignees(meta["items"])
     elif cache_type == "labels":
         meta = load_label_cache_meta()
-        meta["items"] = [lbl for lbl in meta.get("items", []) if lbl != item_id]
+        meta["items"] = [lbl for lbl in meta.get("items", []) if lbl.get("name") != item_id]
         save_label_cache(meta["items"])
     elif cache_type == "projects":
         meta = load_projects_meta()
