@@ -1,6 +1,6 @@
-"""Regression tests for JiraClient.count_label_usage POST/GET fallback logic."""
+"""Regression tests for JiraClient.count_label_usage."""
 import pytest
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 from models import JiraConfig
 from jira_client import JiraClient
 
@@ -23,11 +23,10 @@ def _make_response(status_code, json_body):
     return resp
 
 
-class TestCountLabelUsagePostFallback:
-    """count_label_usage should try POST, fall back to GET on 405."""
+class TestCountLabelUsage:
 
-    def test_post_succeeds(self, cfg):
-        """Happy path: POST returns 200 for all labels."""
+    def test_returns_counts(self, cfg):
+        """Happy path: GET /rest/api/3/search returns total for each label."""
         client = JiraClient(cfg)
         ok = _make_response(200, {"total": 3})
         with patch.object(client, "_request", return_value=ok) as mock_req:
@@ -35,41 +34,23 @@ class TestCountLabelUsagePostFallback:
 
         assert err is None
         assert results == [{"name": "alpha", "count": 3}, {"name": "beta", "count": 3}]
-        # Both calls must be POST
         for c in mock_req.call_args_list:
-            assert c.args[0] == "POST"
+            assert c.args[0] == "GET"
+            assert c.args[1].endswith("/search")
 
-    def test_get_fallback_on_405(self, cfg):
-        """When first POST returns 405, remaining labels must use GET."""
+    def test_uses_search_endpoint(self, cfg):
+        """Must call /rest/api/3/search, not /rest/api/3/issue/search."""
         client = JiraClient(cfg)
-        resp_405 = _make_response(405, {})
-        resp_ok = _make_response(200, {"total": 7})
+        ok = _make_response(200, {"total": 0})
+        with patch.object(client, "_request", return_value=ok) as mock_req:
+            client.count_label_usage(["foo"])
 
-        call_count = {"n": 0}
+        url = mock_req.call_args_list[0].args[1]
+        assert url.endswith("/search")
+        assert "issue/search" not in url
 
-        def side_effect(method, url, **kwargs):
-            call_count["n"] += 1
-            if method == "POST":
-                return resp_405
-            return resp_ok
-
-        with patch.object(client, "_request", side_effect=side_effect) as mock_req:
-            results, err = client.count_label_usage(["first", "second", "third"])
-
-        assert err is None
-        methods = [c.args[0] for c in mock_req.call_args_list]
-        # First call is POST (which returns 405), rest must be GET
-        assert methods[0] == "POST"
-        assert all(m == "GET" for m in methods[1:])
-        # After 405, GET is issued immediately for "first" (same iteration), so all get 7
-        assert results == [
-            {"name": "first", "count": 7},
-            {"name": "second", "count": 7},
-            {"name": "third", "count": 7},
-        ]
-
-    def test_special_char_labels_use_post(self, cfg):
-        """Labels with hyphens/underscores must still go through POST first."""
+    def test_special_char_labels(self, cfg):
+        """Labels with hyphens/underscores must work via GET query params."""
         client = JiraClient(cfg)
         ok = _make_response(200, {"total": 5})
         with patch.object(client, "_request", return_value=ok) as mock_req:
@@ -77,16 +58,26 @@ class TestCountLabelUsagePostFallback:
 
         assert err is None
         assert results == [{"name": "CIS-Infra_Eng_SAN", "count": 5}]
-        assert mock_req.call_args_list[0].args[0] == "POST"
+        call = mock_req.call_args_list[0]
+        assert call.args[0] == "GET"
+        assert '"CIS-Infra_Eng_SAN"' in call.kwargs["params"]["jql"]
 
-    def test_non_405_error_counts_as_zero(self, cfg):
-        """Non-200/non-405 responses (e.g. 400) count as 0 but don't switch to GET."""
+    def test_non_200_counts_as_zero(self, cfg):
+        """Non-200 responses count as 0 but don't abort the batch."""
         client = JiraClient(cfg)
-        resp_400 = _make_response(400, {})
-        with patch.object(client, "_request", return_value=resp_400) as mock_req:
+        resp_404 = _make_response(404, {})
+        with patch.object(client, "_request", return_value=resp_404):
             results, err = client.count_label_usage(["foo", "bar"])
 
         assert err is None
         assert all(r["count"] == 0 for r in results)
-        # Should remain POST throughout
-        assert all(c.args[0] == "POST" for c in mock_req.call_args_list)
+
+    def test_maxresults_zero(self, cfg):
+        """maxResults=0 must be passed so Jira skips returning issue bodies."""
+        client = JiraClient(cfg)
+        ok = _make_response(200, {"total": 1})
+        with patch.object(client, "_request", return_value=ok) as mock_req:
+            client.count_label_usage(["x"])
+
+        params = mock_req.call_args_list[0].kwargs["params"]
+        assert params["maxResults"] == 0
