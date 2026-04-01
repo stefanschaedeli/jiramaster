@@ -743,10 +743,11 @@ class JiraClient:
     ) -> Tuple[List[dict], Optional[str]]:
         """Count how many issues use each label and return [{name, count}] list.
 
-        Makes one API call per label (POST /rest/api/3/issue/search with maxResults=0
-        to read the `total` field without fetching issue bodies). Uses POST to avoid
-        Jira Cloud returning 404 for GET requests with label values containing special
-        characters. Intentionally bounded by the cached label set (typically 5–200 labels).
+        Makes one API call per label (maxResults=0 to read only the `total` field).
+        Tries POST /rest/api/3/issue/search first — avoids Jira Cloud returning 404 for
+        GET requests when label values contain special characters (hyphens, underscores).
+        Falls back to GET automatically if the server returns 405 (Jira Server/Data Center).
+        Intentionally bounded by the cached label set (typically 5–200 labels).
 
         project_key: if set, scopes the JQL to that project only.
         emit: optional callable(str) for progress status messages.
@@ -757,6 +758,10 @@ class JiraClient:
                 emit(msg)
 
         results: List[dict] = []
+        # Some Jira Server/Data Center instances reject POST /issue/search with 405.
+        # Try POST first (avoids 404 for special-char labels on Jira Cloud); if the
+        # server returns 405, fall back to GET for the remainder of the labels.
+        use_post = True
         try:
             total = len(labels)
             for i, lbl in enumerate(labels, 1):
@@ -766,15 +771,26 @@ class JiraClient:
                     jql = f'project = "{project_key}" AND labels = "{lbl}"'
                 else:
                     jql = f'labels = "{lbl}"'
-                # Use POST to avoid Jira Cloud returning 404 for GET requests with
-                # label values containing special characters (hyphens, underscores).
-                # maxResults=0 is sufficient — we only need the `total` field.
-                resp = self._request(
-                    "POST", self._url("issue/search"),
-                    label="count_label_usage",
-                    json={"jql": jql, "maxResults": 0, "fields": []},
-                    timeout=10,
-                )
+                if use_post:
+                    resp = self._request(
+                        "POST", self._url("issue/search"),
+                        label="count_label_usage",
+                        json={"jql": jql, "maxResults": 0, "fields": []},
+                        timeout=10,
+                    )
+                    if resp.status_code == 405:
+                        log.info(
+                            "count_label_usage: POST not supported (HTTP 405), "
+                            "switching to GET for remaining labels"
+                        )
+                        use_post = False
+                if not use_post:
+                    resp = self._request(
+                        "GET", self._url("issue/search"),
+                        label="count_label_usage",
+                        params={"jql": jql, "maxResults": 0, "fields": ""},
+                        timeout=10,
+                    )
                 if resp.status_code == 200:
                     count = resp.json().get("total", 0)
                 else:
