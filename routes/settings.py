@@ -1,4 +1,5 @@
 import re
+import subprocess
 import threading
 
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, Response
@@ -10,6 +11,22 @@ from assignees import load_assignees
 from operation_events import create_operation, emit_event, stream_events
 
 bp = Blueprint("settings", __name__, url_prefix="/settings")
+
+import logging
+log = logging.getLogger(__name__)
+
+
+def _git_version() -> str:
+    """Return the current short git commit hash, or 'unknown'."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=5
+        )
+        return result.stdout.strip() or "unknown"
+    except Exception:
+        return "unknown"
+
 
 _PROJECT_KEY_RE = re.compile(r"^[A-Z][A-Z0-9]{1,9}$")
 _CUSTOM_FIELD_RE = re.compile(r"^customfield_\d+$")
@@ -48,7 +65,8 @@ def _cfg_from_form(form, existing: JiraConfig = None) -> JiraConfig:
 def _render_settings(cfg: JiraConfig):
     return render_template("settings/index.html", cfg=cfg,
                            assignees=load_assignees(),
-                           security=get_security_status())
+                           security=get_security_status(),
+                           git_version=_git_version())
 
 
 @bp.route("/", methods=["GET"])
@@ -57,7 +75,7 @@ def index():
     assignees = load_assignees()
     security = get_security_status()
     return render_template("settings/index.html", cfg=cfg, assignees=assignees,
-                           security=security)
+                           security=security, git_version=_git_version())
 
 
 @bp.route("/save", methods=["POST"])

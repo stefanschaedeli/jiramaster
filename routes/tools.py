@@ -18,18 +18,6 @@ log = logging.getLogger(__name__)
 bp = Blueprint("tools", __name__, url_prefix="/tools")
 
 
-def _git_version() -> str:
-    """Return the current short git commit hash, or 'unknown'."""
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
-            capture_output=True, text=True, timeout=5
-        )
-        return result.stdout.strip() or "unknown"
-    except Exception:
-        return "unknown"
-
-
 @bp.route("/", methods=["GET"])
 def index():
     cfg = load_config()
@@ -48,7 +36,6 @@ def index():
         cfg=cfg,
         selected_project=selected_project,
         selected_label_project=selected_label_project,
-        git_version=_git_version(),
     )
 
 
