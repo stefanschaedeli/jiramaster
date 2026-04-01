@@ -7,7 +7,7 @@ from pathlib import Path
 from logging_config import setup_logging
 setup_logging()
 
-from flask import Flask, render_template, session
+from flask import Flask, g, render_template, session
 from flask_wtf.csrf import CSRFProtect
 
 log = logging.getLogger(__name__)
@@ -39,15 +39,17 @@ app.config["SESSION_COOKIE_SECURE"] = os.environ.get("HTTPS", "") == "1"  # only
 @app.before_request
 def _make_session_permanent():
     session.permanent = True
+    g.csp_nonce = secrets.token_urlsafe(16)
 
 
 @app.after_request
 def _set_security_headers(response):
+    nonce = getattr(g, "csp_nonce", "")
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "SAMEORIGIN"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self' https://cdn.jsdelivr.net; "
+        f"script-src 'self' 'nonce-{nonce}' https://cdn.jsdelivr.net; "
         "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
         "img-src 'self' data:; "
         "font-src 'self' https://cdn.jsdelivr.net; "
@@ -101,7 +103,12 @@ log.info("JiraMaster version: %s", _APP_VERSION)
 def inject_globals():
     from config import load_config
     cfg = load_config()
-    return {"jira_configured": cfg.is_configured(), "project_key": cfg.project_key, "app_version": _APP_VERSION}
+    return {
+        "jira_configured": cfg.is_configured(),
+        "project_key": cfg.project_key,
+        "app_version": _APP_VERSION,
+        "csp_nonce": getattr(g, "csp_nonce", ""),
+    }
 
 
 if __name__ == "__main__":

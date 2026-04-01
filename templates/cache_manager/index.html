@@ -93,7 +93,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce }}">
 (function () {
   const csrfToken = '{{ csrf_token() }}';
 

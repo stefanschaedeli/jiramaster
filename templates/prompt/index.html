@@ -144,7 +144,7 @@
   <input type="hidden" name="include_subtasks" id="dl_include_subtasks" value="{{ '1' if tuning.include_subtasks else '0' }}">
 </form>
 
-<script>
+<script nonce="{{ csp_nonce }}">
 (function () {
   const aggressivenessLabels = {
     1: "Conservative — explicit decisions only",

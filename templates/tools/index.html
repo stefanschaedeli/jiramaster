@@ -153,7 +153,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce }}">
 (function () {
   const projectSelect = document.getElementById('project-scope-select');
   const loadProjectsBtn = document.getElementById('load-projects-btn');

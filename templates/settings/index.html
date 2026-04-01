@@ -234,7 +234,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce }}">
 // Mirror main form values into hidden test form before submission
 document.getElementById('testForm').addEventListener('submit', function() {
   document.getElementById('test_base_url').value = document.getElementById('base_url').value;

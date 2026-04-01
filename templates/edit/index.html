@@ -198,7 +198,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce }}">
 (function () {
   function checkAC(textarea) {
     if (!textarea.value.trim()) {
