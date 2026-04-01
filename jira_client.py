@@ -73,9 +73,14 @@ def _adf(text: str) -> dict:
     return {"version": 1, "type": "doc", "content": paragraphs}
 
 
+class OperationAbortedError(Exception):
+    """Raised by JiraClient._request() when the operation's abort flag is set."""
+
+
 class JiraClient:
     def __init__(self, cfg: JiraConfig, verbose: bool = False,
-                 event_callback: Optional[Callable[[dict], None]] = None):
+                 event_callback: Optional[Callable[[dict], None]] = None,
+                 abort_check: Optional[Callable[[], bool]] = None):
         self.base_url = cfg.base_url.rstrip("/")
         self.project_key = cfg.project_key
         self.ac_field_id = cfg.ac_field_id or ""
@@ -84,6 +89,7 @@ class JiraClient:
         self._teams_base = f"https://api.atlassian.com/gateway/api/public/teams/v1/org/{self._org_id}"
         self._verbose = verbose
         self._event_callback = event_callback
+        self._abort_check = abort_check
 
         self.labels: List[str] = cfg.labels or []
 
@@ -107,6 +113,8 @@ class JiraClient:
 
     def _request(self, method: str, url: str, label: str = "", **kwargs) -> requests.Response:
         """Central wrapper around session.request with verbose logging and event emission."""
+        if self._abort_check and self._abort_check():
+            raise OperationAbortedError("Operation aborted")
         body = kwargs.get("json")
         params = kwargs.get("params")
 

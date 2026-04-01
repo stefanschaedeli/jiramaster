@@ -7,7 +7,7 @@ from flask import Blueprint, render_template, request, flash, redirect, url_for,
 import logging
 
 from config import load_config
-from jira_client import JiraClient
+from jira_client import JiraClient, OperationAbortedError
 from assignees import load_assignees, save_assignees
 from labels import load_label_cache, save_label_cache
 from projects import load_projects, save_projects
@@ -385,7 +385,8 @@ def _run_refresh_assignees(cfg, op_id, params):
             max_results = 50
 
         callback = lambda evt: emit_event(op_id, evt)
-        client = JiraClient(cfg, verbose=True, event_callback=callback)
+        client = JiraClient(cfg, verbose=True, event_callback=callback,
+                            abort_check=lambda: is_aborted(op_id))
 
         def emit_status(msg):
             emit_event(op_id, {"type": "status", "message": msg})
@@ -394,11 +395,12 @@ def _run_refresh_assignees(cfg, op_id, params):
             emit_event(op_id, {"type": "error", "message": "Operation aborted"})
             return
 
-        users, err = _build_assignee_list(
-            client, project_scope, role_id_raw, group_name, team_id, query, max_results,
-            emit=emit_status,
-        )
-        if is_aborted(op_id):
+        try:
+            users, err = _build_assignee_list(
+                client, project_scope, role_id_raw, group_name, team_id, query, max_results,
+                emit=emit_status,
+            )
+        except OperationAbortedError:
             emit_event(op_id, {"type": "error", "message": "Operation aborted"})
             return
 
@@ -444,11 +446,13 @@ def _run_refresh_labels(cfg, op_id):
     """Background worker for label refresh with event emission."""
     try:
         callback = lambda evt: emit_event(op_id, evt)
-        client = JiraClient(cfg, verbose=True, event_callback=callback)
+        client = JiraClient(cfg, verbose=True, event_callback=callback,
+                            abort_check=lambda: is_aborted(op_id))
 
         emit_event(op_id, {"type": "status", "message": "Fetching labels from Jira..."})
-        fetched, err = client.fetch_labels()
-        if is_aborted(op_id):
+        try:
+            fetched, err = client.fetch_labels()
+        except OperationAbortedError:
             emit_event(op_id, {"type": "error", "message": "Operation aborted"})
             return
         if err:
