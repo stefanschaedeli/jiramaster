@@ -31,23 +31,16 @@ def index():
 
 @bp.route("/generate", methods=["POST"])
 def generate():
-    meeting_notes = request.form.get("meeting_notes", "").strip()
     tuning = _tuning_from_form(request.form)
-    generated = build_prompt(meeting_notes, tuning)
-    return render_template(
-        "prompt/index.html",
-        generated_prompt=generated,
-        meeting_notes=meeting_notes,
-        tuning=tuning,
-    )
+    generated = build_prompt("", tuning)
+    return render_template("prompt/index.html", generated_prompt=generated, tuning=tuning)
 
 
 @bp.route("/download", methods=["POST"])
 def download():
     """Serve the generated prompt as a downloadable .txt file."""
-    meeting_notes = request.form.get("meeting_notes", "").strip()
     tuning = _tuning_from_form(request.form)
-    generated = build_prompt(meeting_notes, tuning)
+    generated = build_prompt("", tuning)
     return Response(
         generated,
         mimetype="text/plain",

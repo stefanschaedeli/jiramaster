@@ -3,7 +3,7 @@
 
 {% block content %}
 <h2 class="mb-1">Step 1: Generate Copilot Prompt</h2>
-<p class="text-muted mb-4">Tune the controls and build a structured prompt for GitHub Copilot / ChatGPT. Paste meeting notes to enrich the output, or leave blank to generate a sample.</p>
+<p class="text-muted mb-4">Tune the controls and build a structured prompt for GitHub Copilot / ChatGPT.</p>
 
 <form method="POST" action="{{ url_for('prompt.generate') }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -72,26 +72,16 @@
             <p class="text-muted small mb-0">Adds 2–4 sub-task titles per story.</p>
           </div>
 
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Center: Meeting Notes ── -->
-    <div class="col">
-      <div class="card h-100">
-        <div class="card-header fw-semibold">Meeting Notes <span class="text-muted fw-normal small">(optional)</span></div>
-        <div class="card-body d-flex flex-column">
-          <textarea name="meeting_notes" class="form-control font-mono flex-grow-1"
-                    rows="16" placeholder="Paste meeting notes to enrich the prompt — or leave blank to generate a sample.">{{ meeting_notes or '' }}</textarea>
-          <button type="submit" class="btn btn-primary mt-3 w-100">
+          <button type="submit" class="btn btn-primary mt-auto w-100">
             Generate Prompt →
           </button>
+
         </div>
       </div>
     </div>
 
     <!-- ── Right: Generated Prompt ── -->
-    <div class="col-lg-4">
+    <div class="col">
       <div class="card h-100">
         <div class="card-header d-flex justify-content-between align-items-center fw-semibold">
           Generated Prompt
@@ -136,7 +126,6 @@
 <!-- Hidden form for prompt download — mirrors all tuning fields -->
 <form method="POST" action="{{ url_for('prompt.download') }}" id="downloadForm" class="d-none">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <input type="hidden" name="meeting_notes" id="dl_meeting_notes" value="{{ meeting_notes or '' }}">
   <input type="hidden" name="aggressiveness" id="dl_aggressiveness" value="{{ tuning.aggressiveness }}">
   <input type="hidden" name="stories_min"    id="dl_stories_min"    value="{{ tuning.stories_min }}">
   <input type="hidden" name="stories_max"    id="dl_stories_max"    value="{{ tuning.stories_max }}">
@@ -171,9 +160,6 @@
     document.getElementById('dl_stories_max').value      = smax;
     document.getElementById('dl_detail_level').value     = dl;
     document.getElementById('dl_include_subtasks').value = sub;
-    // Mirror meeting notes textarea into download form
-    const notesEl = document.querySelector('textarea[name="meeting_notes"]');
-    if (notesEl) document.getElementById('dl_meeting_notes').value = notesEl.value;
   }
 
   function updateAggressivenessLabel() {
@@ -192,16 +178,6 @@
 
   // Init label on page load
   updateAggressivenessLabel();
-
-  // Sync meeting notes into download form on submit
-  const dlForm = document.getElementById('downloadForm');
-  if (dlForm) {
-    dlForm.addEventListener('submit', function () {
-      const notesEl = document.querySelector('textarea[name="meeting_notes"]');
-      if (notesEl) document.getElementById('dl_meeting_notes').value = notesEl.value;
-      syncHidden();
-    });
-  }
 })();
 </script>
 {% endblock %}
