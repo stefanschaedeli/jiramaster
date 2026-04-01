@@ -67,7 +67,8 @@ def test_save_rejects_http_url_preserves_other_fields(client):
 # ---------------------------------------------------------------------------
 
 def test_save_rejects_invalid_project_key(client):
-    resp = _post_save(client, {"project_key": "abc"})
+    # "1ABC" starts with a digit — rejected by ^[A-Z][A-Z0-9]{1,9}$
+    resp = _post_save(client, {"project_key": "1ABC"})
     assert resp.status_code == 200
     assert b"Project key" in resp.data
 
