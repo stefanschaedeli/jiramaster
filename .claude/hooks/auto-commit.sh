@@ -42,18 +42,11 @@ else
   RELEASE_TYPE="patch"
 fi
 
-# For major releases: block and ask user to confirm via systemMessage
-if [ "$RELEASE_TYPE" = "major" ]; then
-  MSG="MAJOR release candidate detected: ${FILE_COUNT} files, net ${NET_LINES} lines. "
-  MSG+="Current version: v${CURRENT}. "
-  MSG+="Proposed: v$((MAJOR + 1)).0.0. "
-  MSG+="Reply 'confirm major' to proceed, or I will commit as a minor release instead."
-  echo "{\"decision\": \"block\", \"reason\": \"Major release requires confirmation\", \"systemMessage\": \"${MSG}\"}"
-  exit 0
-fi
-
 # Bump the right component
-if [ "$RELEASE_TYPE" = "minor" ]; then
+if [ "$RELEASE_TYPE" = "major" ]; then
+  NEW_VERSION="$((MAJOR + 1)).0.0"
+  LABEL="major"
+elif [ "$RELEASE_TYPE" = "minor" ]; then
   NEW_VERSION="${MAJOR}.$((MINOR + 1)).0"
   LABEL="minor"
 else

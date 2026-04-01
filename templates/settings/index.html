@@ -86,6 +86,16 @@
             </div>
           </div>
 
+          <hr class="my-3">
+          <div class="mb-3">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" name="verbose_logging"
+                     id="verbose_logging" {% if cfg.verbose_logging %}checked{% endif %}>
+              <label class="form-check-label fw-semibold" for="verbose_logging">Verbose Logging</label>
+            </div>
+            <div class="form-text">Log full API request/response details (security-masked). View logs from the <a href="{{ url_for('logs.index') }}">Logs</a> page.</div>
+          </div>
+
           <div class="d-flex gap-2 flex-wrap">
             <button type="submit" class="btn btn-primary">Save Settings</button>
             <button type="submit" form="testForm" class="btn btn-outline-secondary">
@@ -235,14 +245,58 @@
 
 {% block scripts %}
 <script nonce="{{ csp_nonce }}">
-// Mirror main form values into hidden test form before submission
-document.getElementById('testForm').addEventListener('submit', function() {
-  document.getElementById('test_base_url').value = document.getElementById('base_url').value;
-  document.getElementById('test_username').value = document.getElementById('username').value;
-  document.getElementById('test_api_token').value = document.getElementById('api_token').value;
-  document.getElementById('test_project_key').value = document.getElementById('project_key').value;
-  document.getElementById('test_proxy_url').value = document.getElementById('proxy_url').value;
-  document.getElementById('test_org_id').value = document.getElementById('org_id').value;
-});
+(function() {
+  var csrfToken = document.querySelector('#settingsForm input[name="csrf_token"]').value;
+  var eventsUrl = '{{ url_for("settings.settings_events_stream", op_id="") }}';
+
+  function getFormData() {
+    var fd = new FormData();
+    fd.append('csrf_token', csrfToken);
+    fd.append('base_url', document.getElementById('base_url').value);
+    fd.append('username', document.getElementById('username').value);
+    fd.append('api_token', document.getElementById('api_token').value);
+    fd.append('project_key', document.getElementById('project_key').value);
+    fd.append('proxy_url', document.getElementById('proxy_url').value);
+    fd.append('org_id', document.getElementById('org_id').value);
+    return fd;
+  }
+
+  // Test Connection — intercept hidden form submission
+  document.getElementById('testForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    startOperation(
+      '{{ url_for("settings.start_test_connection") }}',
+      getFormData(),
+      'Testing connection to Jira\u2026',
+      { csrfToken: csrfToken, eventsUrl: eventsUrl, onComplete: function() { location.reload(); } }
+    );
+  });
+
+  // Detect Fields
+  document.getElementById('detectForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    var fd = new FormData();
+    fd.append('csrf_token', csrfToken);
+    startOperation(
+      '{{ url_for("settings.start_detect_fields") }}',
+      fd,
+      'Detecting Acceptance Criteria field\u2026',
+      { csrfToken: csrfToken, eventsUrl: eventsUrl, onComplete: function() { location.reload(); } }
+    );
+  });
+
+  // Detect Org ID
+  document.getElementById('detectOrgForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    var fd = new FormData();
+    fd.append('csrf_token', csrfToken);
+    startOperation(
+      '{{ url_for("settings.start_detect_org_id") }}',
+      fd,
+      'Detecting Atlassian Organization ID\u2026',
+      { csrfToken: csrfToken, eventsUrl: eventsUrl, onComplete: function() { location.reload(); } }
+    );
+  });
+})();
 </script>
 {% endblock %}

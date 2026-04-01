@@ -17,6 +17,7 @@ def register_blueprints(app: Flask) -> None:
     from routes.import_view import bp as import_bp
     from routes.edit import bp as edit_bp
     from routes.upload import bp as upload_bp
+    from routes.logs import bp as logs_bp
 
     app.register_blueprint(settings_bp)
     app.register_blueprint(tools_bp)
@@ -25,3 +26,4 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(import_bp)
     app.register_blueprint(edit_bp)
     app.register_blueprint(upload_bp)
+    app.register_blueprint(logs_bp)

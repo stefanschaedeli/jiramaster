@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Logs | JiraMaster{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="mb-0">Application Logs</h2>
+  <div class="d-flex gap-2 align-items-center">
+    <select id="levelFilter" class="form-select form-select-sm" style="width:auto">
+      <option value="ALL">All Levels</option>
+      <option value="DEBUG">DEBUG</option>
+      <option value="INFO" selected>INFO</option>
+      <option value="WARNING">WARNING</option>
+      <option value="ERROR">ERROR</option>
+    </select>
+    <select id="lineCount" class="form-select form-select-sm" style="width:auto">
+      <option value="100">100 lines</option>
+      <option value="200" selected>200 lines</option>
+      <option value="500">500 lines</option>
+    </select>
+    <button id="refreshBtn" class="btn btn-sm btn-outline-primary">
+      <i class="bi bi-arrow-clockwise"></i> Refresh
+    </button>
+    <div class="form-check form-switch mb-0 ms-2">
+      <input class="form-check-input" type="checkbox" id="autoRefresh">
+      <label class="form-check-label small" for="autoRefresh">Auto</label>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    <div id="logStatus" class="px-3 py-2 border-bottom small text-muted d-flex justify-content-between">
+      <span id="logInfo">Loading...</span>
+      <span id="fileSize"></span>
+    </div>
+    <pre id="logContent" class="jm-log-viewer mb-0 p-3"></pre>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script nonce="{{ csp_nonce }}">
+(function() {
+  const logContent = document.getElementById('logContent');
+  const logInfo = document.getElementById('logInfo');
+  const fileSize = document.getElementById('fileSize');
+  const levelFilter = document.getElementById('levelFilter');
+  const lineCount = document.getElementById('lineCount');
+  const refreshBtn = document.getElementById('refreshBtn');
+  const autoRefresh = document.getElementById('autoRefresh');
+  let refreshInterval = null;
+
+  function colorLine(line) {
+    const escaped = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    if (escaped.includes('[ERROR]')) return '<span class="log-error">' + escaped + '</span>';
+    if (escaped.includes('[WARNING]')) return '<span class="log-warning">' + escaped + '</span>';
+    if (escaped.includes('[DEBUG]')) return '<span class="log-debug">' + escaped + '</span>';
+    return escaped;
+  }
+
+  function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function fetchLogs() {
+    const level = levelFilter.value;
+    const lines = lineCount.value;
+    const url = '{{ url_for("logs.tail") }}?lines=' + lines + '&level=' + level;
+    refreshBtn.disabled = true;
+    fetch(url)
+      .then(r => r.json())
+      .then(data => {
+        logContent.innerHTML = data.lines.map(colorLine).join('\n');
+        logInfo.textContent = data.total_lines + ' lines shown';
+        fileSize.textContent = formatSize(data.file_size);
+        logContent.scrollTop = logContent.scrollHeight;
+      })
+      .catch(err => {
+        logInfo.textContent = 'Error loading logs';
+        console.error(err);
+      })
+      .finally(() => { refreshBtn.disabled = false; });
+  }
+
+  refreshBtn.addEventListener('click', fetchLogs);
+  levelFilter.addEventListener('change', fetchLogs);
+  lineCount.addEventListener('change', fetchLogs);
+
+  autoRefresh.addEventListener('change', function() {
+    if (this.checked) {
+      refreshInterval = setInterval(fetchLogs, 5000);
+    } else {
+      clearInterval(refreshInterval);
+      refreshInterval = null;
+    }
+  });
+
+  fetchLogs();
+})();
+</script>
+{% endblock %}

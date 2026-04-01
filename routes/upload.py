@@ -43,7 +43,7 @@ def run():
         return redirect(url_for("settings.index"))
 
     epics = load_epics(work_id)
-    client = JiraClient(cfg)
+    client = JiraClient(cfg, verbose=cfg.verbose_logging)
     results = client.upload_epics(epics)
 
     # Save updated epics (with jira_keys) back

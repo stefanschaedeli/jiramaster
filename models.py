@@ -123,6 +123,7 @@ class JiraConfig:
     proxy_url: str = ""
     org_id: str = ""
     labels: List[str] = field(default_factory=list)
+    verbose_logging: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -134,6 +135,7 @@ class JiraConfig:
             "proxy_url": self.proxy_url,
             "org_id": self.org_id,
             "labels": self.labels,
+            "verbose_logging": self.verbose_logging,
         }
 
     @classmethod
@@ -151,6 +153,7 @@ class JiraConfig:
             proxy_url=d.get("proxy_url", ""),
             org_id=d.get("org_id", ""),
             labels=raw_labels,
+            verbose_logging=d.get("verbose_logging", False),
         )
 
     def is_configured(self) -> bool:

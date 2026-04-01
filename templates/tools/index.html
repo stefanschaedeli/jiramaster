@@ -335,6 +335,41 @@
       .finally(function () { loadTeamsBtn.disabled = false; });
   });
   {% endif %}
+
+  // ── Loading overlay interceptors ──
+
+  document.getElementById('refresh-assignees-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    var formData = new FormData(this);
+    startOperation(
+      '{{ url_for("tools.start_refresh_assignees") }}',
+      formData,
+      'Refreshing assignees from Jira\u2026',
+      {
+        csrfToken: csrfToken,
+        eventsUrl: '{{ url_for("tools.operation_events_stream", op_id="") }}',
+        onComplete: function() { location.reload(); }
+      }
+    );
+  });
+
+  var labelsForm = document.querySelector('form[action="{{ url_for("tools.refresh_labels") }}"]');
+  if (labelsForm) {
+    labelsForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      var formData = new FormData(this);
+      startOperation(
+        '{{ url_for("tools.start_refresh_labels") }}',
+        formData,
+        'Refreshing labels from Jira\u2026',
+        {
+          csrfToken: csrfToken,
+          eventsUrl: '{{ url_for("tools.operation_events_stream", op_id="") }}',
+          onComplete: function() { location.reload(); }
+        }
+      );
+    });
+  }
 })();
 </script>
 {% endblock %}

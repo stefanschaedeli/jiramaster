@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import List, Optional, Tuple
+from datetime import datetime, timezone
+from typing import Any, Callable, List, Optional, Tuple
 
 import certifi
 import requests
 from requests.auth import HTTPBasicAuth
+
+from security_utils import sanitize_request, sanitize_response
 
 log = logging.getLogger(__name__)
 
@@ -71,13 +74,16 @@ def _adf(text: str) -> dict:
 
 
 class JiraClient:
-    def __init__(self, cfg: JiraConfig):
+    def __init__(self, cfg: JiraConfig, verbose: bool = False,
+                 event_callback: Optional[Callable[[dict], None]] = None):
         self.base_url = cfg.base_url.rstrip("/")
         self.project_key = cfg.project_key
         self.ac_field_id = cfg.ac_field_id or ""
         self.api_base = f"{self.base_url}/rest/api/3"
         self._org_id: str = cfg.org_id
         self._teams_base = f"https://api.atlassian.com/gateway/api/public/teams/v1/org/{self._org_id}"
+        self._verbose = verbose
+        self._event_callback = event_callback
 
         self.labels: List[str] = cfg.labels or []
 
@@ -92,6 +98,49 @@ class JiraClient:
 
     def _url(self, path: str) -> str:
         return f"{self.api_base}/{path.lstrip('/')}"
+
+    def _emit(self, event: dict) -> None:
+        """Send an event to the registered callback (used by SSE overlay)."""
+        if self._event_callback:
+            event.setdefault("timestamp", datetime.now(timezone.utc).isoformat())
+            self._event_callback(event)
+
+    def _request(self, method: str, url: str, label: str = "", **kwargs) -> requests.Response:
+        """Central wrapper around session.request with verbose logging and event emission."""
+        body = kwargs.get("json")
+        params = kwargs.get("params")
+
+        if self._verbose:
+            req_info = sanitize_request(method, url, body=body)
+            if params:
+                req_info["params"] = params
+            log.debug("VERBOSE %s → %s %s", label, method, json.dumps(req_info, default=str))
+
+        self._emit({
+            "type": "api_call",
+            "label": label,
+            "method": method.upper(),
+            "url": sanitize_request(method, url)["url"],
+            "params": params,
+        })
+
+        resp = self.session.request(method, url, **kwargs)
+
+        if self._verbose:
+            try:
+                resp_body = resp.json()
+            except Exception:
+                resp_body = resp.text[:500] if resp.text else None
+            resp_info = sanitize_response(resp.status_code, body=resp_body)
+            log.debug("VERBOSE %s ← %s", label, json.dumps(resp_info, default=str))
+
+        self._emit({
+            "type": "api_response",
+            "label": label,
+            "status": resp.status_code,
+        })
+
+        return resp
 
     def _log_error(self, label: str, resp: requests.Response) -> str:
         """Log full response details to file and return a UI-safe summary."""
@@ -129,7 +178,7 @@ class JiraClient:
         Returns (field_id, field_name) on success, or (None, error_message) on failure.
         """
         try:
-            resp = self.session.get(self._url("field"), timeout=10)
+            resp = self._request("GET", self._url("field"), label="detect_ac_field", timeout=10)
             if resp.status_code != 200:
                 return None, self._log_error("detect_ac_field", resp)
             fields = resp.json()
@@ -156,7 +205,7 @@ class JiraClient:
         """
         url = "https://api.atlassian.com/admin/v1/orgs"
         try:
-            resp = self.session.get(url, timeout=10)
+            resp = self._request("GET", url, label="fetch_org_id", timeout=10)
             if resp.status_code != 200:
                 return None, f"HTTP {resp.status_code}: {resp.text[:200]}"
             data = resp.json()
@@ -182,7 +231,7 @@ class JiraClient:
         """
         url = self.base_url + "/_edge/tenant_info"
         try:
-            resp = self.session.get(url, timeout=10)
+            resp = self._request("GET", url, label="fetch_cloud_id", timeout=10)
             if resp.status_code != 200:
                 return None, f"HTTP {resp.status_code}: {resp.text[:200]}"
             cloud_id = resp.json().get("cloudId")
@@ -209,8 +258,9 @@ class JiraClient:
         if query:
             params["query"] = query
         try:
-            resp = self.session.get(
-                self._url("user/assignable/search"),
+            resp = self._request(
+                "GET", self._url("user/assignable/search"),
+                label="fetch_assignees",
                 params=params,
                 timeout=10,
             )
@@ -238,8 +288,9 @@ class JiraClient:
         """
         effective_project = project_key or self.project_key
         try:
-            resp = self.session.get(
-                self._url(f"project/{effective_project}/role"),
+            resp = self._request(
+                "GET", self._url(f"project/{effective_project}/role"),
+                label="fetch_project_roles",
                 timeout=10,
             )
             if resp.status_code != 200:
@@ -269,8 +320,9 @@ class JiraClient:
         """
         effective_project = project_key or self.project_key
         try:
-            resp = self.session.get(
-                self._url(f"project/{effective_project}/role/{role_id}"),
+            resp = self._request(
+                "GET", self._url(f"project/{effective_project}/role/{role_id}"),
+                label="fetch_role_members",
                 timeout=10,
             )
             if resp.status_code != 200:
@@ -313,8 +365,9 @@ class JiraClient:
         Returns (groups, error_message). groups is a list of {name} dicts.
         """
         try:
-            resp = self.session.get(
-                self._url("groups/picker"),
+            resp = self._request(
+                "GET", self._url("groups/picker"),
+                label="fetch_groups",
                 params={"query": query, "maxResults": 50},
                 timeout=10,
             )
@@ -336,8 +389,9 @@ class JiraClient:
         if not self._org_id:
             return [], "Atlassian Org ID not configured — set it in Settings"
         try:
-            resp = self.session.get(
-                f"{self._teams_base}/teams",
+            resp = self._request(
+                "GET", f"{self._teams_base}/teams",
+                label="fetch_teams",
                 params={"query": query, "maxResults": 50},
                 timeout=10,
             )
@@ -370,8 +424,9 @@ class JiraClient:
                 params: dict = {"maxResults": 50}
                 if cursor:
                     params["cursor"] = cursor
-                resp = self.session.get(
-                    f"{self._teams_base}/teams/{team_id}/members",
+                resp = self._request(
+                    "GET", f"{self._teams_base}/teams/{team_id}/members",
+                    label="fetch_team_members",
                     params=params,
                     timeout=10,
                 )
@@ -401,8 +456,9 @@ class JiraClient:
             users: List[dict] = []
             start_at = 0
             while True:
-                resp = self.session.get(
-                    self._url("group/member"),
+                resp = self._request(
+                    "GET", self._url("group/member"),
+                    label="fetch_group_members",
                     params={
                         "groupname": group_name,
                         "startAt": start_at,
@@ -440,8 +496,9 @@ class JiraClient:
             projects: List[dict] = []
             start_at = 0
             while True:
-                resp = self.session.get(
-                    self._url("project/search"),
+                resp = self._request(
+                    "GET", self._url("project/search"),
+                    label="fetch_projects",
                     params={"startAt": start_at, "maxResults": 50},
                     timeout=10,
                 )
@@ -473,8 +530,9 @@ class JiraClient:
             all_labels: List[str] = []
             start_at = 0
             while True:
-                resp = self.session.get(
-                    self._url("label"),
+                resp = self._request(
+                    "GET", self._url("label"),
+                    label="fetch_labels",
                     params={"startAt": start_at, "maxResults": 200},
                     timeout=10,
                 )
@@ -492,8 +550,9 @@ class JiraClient:
             # Step 2: count usage per label via issue/search
             counts: Counter = Counter()
             for lbl in all_labels:
-                resp = self.session.get(
-                    self._url("issue/search"),
+                resp = self._request(
+                    "GET", self._url("issue/search"),
+                    label="fetch_labels:count",
                     params={
                         "jql": f"labels = \"{lbl}\"",
                         "fields": "summary",
@@ -516,7 +575,7 @@ class JiraClient:
 
     def test_connection(self) -> Tuple[bool, str]:
         try:
-            resp = self.session.get(self._url("myself"), timeout=10)
+            resp = self._request("GET", self._url("myself"), label="test_connection", timeout=10)
             if resp.status_code == 200:
                 data = resp.json()
                 display = data.get("displayName", data.get("emailAddress", "Unknown"))
@@ -547,7 +606,7 @@ class JiraClient:
         """POST to /issue. On 400 caused by AC field type mismatch, retry with ADF."""
         log.debug("%s payload: %s", label, json.dumps(payload, indent=2))
         try:
-            resp = self.session.post(self._url("issue"), json=payload, timeout=15)
+            resp = self._request("POST", self._url("issue"), label=label, json=payload, timeout=15)
             if resp.status_code in (200, 201):
                 return resp.json().get("key"), None
 
@@ -558,7 +617,7 @@ class JiraClient:
                 if isinstance(ac_val, str):
                     log.info("%s: plain-text AC rejected, retrying with ADF", label)
                     payload["fields"][self.ac_field_id] = _adf(ac_val)
-                    resp2 = self.session.post(self._url("issue"), json=payload, timeout=15)
+                    resp2 = self._request("POST", self._url("issue"), label=label + ":adf_retry", json=payload, timeout=15)
                     if resp2.status_code in (200, 201):
                         return resp2.json().get("key"), None
                     return None, self._log_error(label, resp2)
@@ -620,8 +679,9 @@ class JiraClient:
         if not target_status:
             return
         try:
-            resp = self.session.get(
-                self._url(f"issue/{issue_key}/transitions"),
+            resp = self._request(
+                "GET", self._url(f"issue/{issue_key}/transitions"),
+                label="transition_issue:get",
                 timeout=10,
             )
             if resp.status_code != 200:
@@ -640,8 +700,9 @@ class JiraClient:
                     issue_key, target_status, available,
                 )
                 return
-            self.session.post(
-                self._url(f"issue/{issue_key}/transitions"),
+            self._request(
+                "POST", self._url(f"issue/{issue_key}/transitions"),
+                label="transition_issue:post",
                 json={"transition": {"id": match["id"]}},
                 timeout=10,
             )
@@ -654,7 +715,7 @@ class JiraClient:
             return
         payload = {"body": _adf(text)}
         try:
-            self.session.post(self._url(f"issue/{issue_key}/comment"), json=payload, timeout=10)
+            self._request("POST", self._url(f"issue/{issue_key}/comment"), label="add_comment", json=payload, timeout=10)
         except requests.RequestException:
             pass
 

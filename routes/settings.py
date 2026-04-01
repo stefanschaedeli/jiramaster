@@ -1,11 +1,13 @@
 import re
+import threading
 
-from flask import Blueprint, render_template, request, flash, redirect, url_for
+from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, Response
 
 from config import load_config, save_config, get_security_status
 from models import JiraConfig
 from jira_client import JiraClient
 from assignees import load_assignees
+from operation_events import create_operation, emit_event, stream_events
 
 bp = Blueprint("settings", __name__, url_prefix="/settings")
 
@@ -39,6 +41,7 @@ def _cfg_from_form(form, existing: JiraConfig = None) -> JiraConfig:
         proxy_url=form.get("proxy_url", "").strip(),
         org_id=form.get("org_id", "").strip(),
         labels=existing.labels if existing else [],
+        verbose_logging=form.get("verbose_logging") == "on",
     )
 
 
@@ -82,7 +85,7 @@ def save():
 @bp.route("/detect-fields", methods=["POST"])
 def detect_fields():
     cfg = load_config()
-    client = JiraClient(cfg)
+    client = JiraClient(cfg, verbose=cfg.verbose_logging)
     field_id, result = client.detect_ac_field()
     if field_id:
         cfg.ac_field_id = field_id
@@ -96,7 +99,7 @@ def detect_fields():
 @bp.route("/detect-org-id", methods=["POST"])
 def detect_org_id():
     cfg = load_config()
-    client = JiraClient(cfg)
+    client = JiraClient(cfg, verbose=cfg.verbose_logging)
     org_id, err = client.fetch_org_id()
     if org_id:
         cfg.org_id = org_id
@@ -123,10 +126,119 @@ def test_connection():
             flash(err, "danger")
         return _render_settings(_cfg_from_form(request.form))
     cfg = _cfg_from_form(request.form)
-    client = JiraClient(cfg)
+    client = JiraClient(cfg, verbose=cfg.verbose_logging)
     ok, msg = client.test_connection()
     if ok:
         flash(f"Connection successful: {msg}", "success")
     else:
         flash(f"Connection failed: {msg}", "danger")
     return _render_settings(cfg)
+
+
+# ── SSE overlay endpoints ──
+
+import logging
+_log = logging.getLogger(__name__)
+
+
+@bp.route("/events/<op_id>")
+def settings_events_stream(op_id):
+    """SSE stream for a running settings operation."""
+    return Response(
+        stream_events(op_id),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@bp.route("/start-test-connection", methods=["POST"])
+def start_test_connection():
+    """Start connection test in a background thread; return operation_id."""
+    cfg = _cfg_from_form(request.form)
+    op_id = create_operation()
+    thread = threading.Thread(
+        target=_run_test_connection, args=(cfg, op_id), daemon=True
+    )
+    thread.start()
+    return jsonify({"operation_id": op_id})
+
+
+def _run_test_connection(cfg, op_id):
+    try:
+        callback = lambda evt: emit_event(op_id, evt)
+        client = JiraClient(cfg, verbose=True, event_callback=callback)
+        emit_event(op_id, {"type": "status", "message": "Testing connection to Jira..."})
+        ok, msg = client.test_connection()
+        if ok:
+            emit_event(op_id, {"type": "complete", "message": "Connection successful", "summary": msg})
+        else:
+            emit_event(op_id, {"type": "error", "message": f"Connection failed: {msg}"})
+    except Exception as exc:
+        _log.exception("_run_test_connection failed: %s", exc)
+        emit_event(op_id, {"type": "error", "message": str(exc)})
+
+
+@bp.route("/start-detect-fields", methods=["POST"])
+def start_detect_fields():
+    """Start field detection in a background thread; return operation_id."""
+    cfg = load_config()
+    op_id = create_operation()
+    thread = threading.Thread(
+        target=_run_detect_fields, args=(cfg, op_id), daemon=True
+    )
+    thread.start()
+    return jsonify({"operation_id": op_id})
+
+
+def _run_detect_fields(cfg, op_id):
+    try:
+        callback = lambda evt: emit_event(op_id, evt)
+        client = JiraClient(cfg, verbose=True, event_callback=callback)
+        emit_event(op_id, {"type": "status", "message": "Detecting Acceptance Criteria field..."})
+        field_id, result = client.detect_ac_field()
+        if field_id:
+            cfg.ac_field_id = field_id
+            save_config(cfg)
+            emit_event(op_id, {
+                "type": "complete",
+                "message": "Field detected",
+                "summary": f"Detected: {result} ({field_id}). Saved to config.",
+            })
+        else:
+            emit_event(op_id, {"type": "error", "message": f"Field detection failed: {result}"})
+    except Exception as exc:
+        _log.exception("_run_detect_fields failed: %s", exc)
+        emit_event(op_id, {"type": "error", "message": str(exc)})
+
+
+@bp.route("/start-detect-org-id", methods=["POST"])
+def start_detect_org_id():
+    """Start org ID detection in a background thread; return operation_id."""
+    cfg = load_config()
+    op_id = create_operation()
+    thread = threading.Thread(
+        target=_run_detect_org_id, args=(cfg, op_id), daemon=True
+    )
+    thread.start()
+    return jsonify({"operation_id": op_id})
+
+
+def _run_detect_org_id(cfg, op_id):
+    try:
+        callback = lambda evt: emit_event(op_id, evt)
+        client = JiraClient(cfg, verbose=True, event_callback=callback)
+        emit_event(op_id, {"type": "status", "message": "Detecting Atlassian Organization ID..."})
+        org_id, err = client.fetch_org_id()
+        if org_id:
+            cfg.org_id = org_id
+            save_config(cfg)
+            emit_event(op_id, {
+                "type": "complete",
+                "message": "Org ID detected",
+                "summary": f"Detected Org ID: {org_id}. Saved to config.",
+            })
+        else:
+            emit_event(op_id, {"type": "error", "message": f"Could not detect Org ID: {err}"})
+    except Exception as exc:
+        _log.exception("_run_detect_org_id failed: %s", exc)
+        emit_event(op_id, {"type": "error", "message": str(exc)})

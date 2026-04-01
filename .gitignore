@@ -10,6 +10,7 @@ config.json
 .secret_key
 .work/
 logs/
+!templates/logs/
 cache/*.json
 venv/
 __pycache__/
