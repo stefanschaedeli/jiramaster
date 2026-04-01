@@ -168,8 +168,6 @@
         <div class="mb-3">
           <form id="count-label-usage-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="label_project_scope"
-                   value="{{ selected_label_project or (cfg.project_key if cfg else '') }}">
             <button type="submit" class="btn btn-sm btn-outline-secondary">
               Count Usage
             </button>
