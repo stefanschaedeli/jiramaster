@@ -743,8 +743,9 @@ class JiraClient:
     ) -> Tuple[List[dict], Optional[str]]:
         """Count how many issues use each label and return [{name, count}] list.
 
-        Uses GET /rest/api/3/search/jql?jql=labels="<label>"&maxResults=0 — the
-        current Jira REST API v3 endpoint (/rest/api/3/search was removed). maxResults=0 returns only metadata including
+        Uses GET /rest/api/3/search/jql?jql=labels="<label>"&maxResults=1 — the
+        current Jira REST API v3 endpoint (/rest/api/3/search was removed).
+        maxResults=1 is the minimum accepted value; only the `total` field is used. maxResults=0 returns only metadata including
         `total`, without fetching issue bodies. One API call per label.
         Intentionally bounded by the cached label set (typically 5–200 labels).
 
@@ -769,7 +770,7 @@ class JiraClient:
                 resp = self._request(
                     "GET", self._url("search/jql"),
                     label="count_label_usage",
-                    params={"jql": jql, "maxResults": 0},
+                    params={"jql": jql, "maxResults": 1},
                     timeout=10,
                 )
                 if resp.status_code == 200:

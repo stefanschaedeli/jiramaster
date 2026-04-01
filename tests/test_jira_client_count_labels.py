@@ -72,12 +72,12 @@ class TestCountLabelUsage:
         assert err is None
         assert all(r["count"] == 0 for r in results)
 
-    def test_maxresults_zero(self, cfg):
-        """maxResults=0 must be passed so Jira skips returning issue bodies."""
+    def test_maxresults_one(self, cfg):
+        """maxResults=1 must be passed; /search/jql rejects 0 with HTTP 400."""
         client = JiraClient(cfg)
         ok = _make_response(200, {"total": 1})
         with patch.object(client, "_request", return_value=ok) as mock_req:
             client.count_label_usage(["x"])
 
         params = mock_req.call_args_list[0].kwargs["params"]
-        assert params["maxResults"] == 0
+        assert params["maxResults"] == 1
