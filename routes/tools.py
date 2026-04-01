@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+import threading
 
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, session, Response
 import logging
@@ -338,7 +339,14 @@ def update_and_restart():
         log.exception("update_and_restart: failed to spawn update script: %s", exc)
         return jsonify({"error": str(exc)}), 500
 
-    log.info("update_and_restart: update script launched, browser will poll for restart")
+    log.info("update_and_restart: update script launched, shutting down in 1s")
+
+    def _shutdown():
+        import time
+        time.sleep(1)
+        os._exit(0)
+
+    threading.Thread(target=_shutdown, daemon=True).start()
     return jsonify({"ok": True})
 
 
