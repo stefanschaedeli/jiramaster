@@ -312,11 +312,12 @@ class JiraClient:
             log.error("fetch_project_roles exception: %s", exc)
             return [], str(exc)
 
-    def fetch_role_members(self, role_id: int, project_key: Optional[str] = None) -> Tuple[List[str], Optional[str]]:
-        """Fetch accountIds of all members in a project role.
+    def fetch_role_members(self, role_id: int, project_key: Optional[str] = None) -> Tuple[List[dict], Optional[str]]:
+        """Fetch all members of a project role as full user dicts.
 
-        GET /project/{key}/role/{id} returns actors; extracts accountId for each user actor.
-        Returns (account_ids, error_message). account_ids is [] on failure.
+        GET /project/{key}/role/{id} returns actors; extracts {accountId, displayName, emailAddress}
+        for each user actor. Group actors are resolved via fetch_group_members (uncapped).
+        Returns (users, error_message). users is [] on failure.
         """
         effective_project = project_key or self.project_key
         try:
@@ -328,11 +329,16 @@ class JiraClient:
             if resp.status_code != 200:
                 return [], self._log_error("fetch_role_members", resp)
             actors = resp.json().get("actors", [])
-            account_ids = [
-                a["actorUser"]["accountId"]
-                for a in actors
-                if a.get("type") == "atlassian-user-role-actor" and a.get("actorUser", {}).get("accountId")
-            ]
+            users: List[dict] = []
+            for a in actors:
+                if a.get("type") == "atlassian-user-role-actor":
+                    account_id = (a.get("actorUser") or {}).get("accountId")
+                    if account_id:
+                        users.append({
+                            "accountId": account_id,
+                            "displayName": a.get("displayName", ""),
+                            "emailAddress": "",
+                        })
             # Also resolve group actors — roles commonly have groups rather than individual users
             group_actors = [a for a in actors if a.get("type") == "atlassian-group-role-actor"]
             if group_actors:
@@ -341,20 +347,21 @@ class JiraClient:
                 group_name = ga.get("name")
                 if not group_name:
                     continue
-                members, group_err = self.fetch_group_members(group_name)
+                members, group_err = self.fetch_group_members(group_name, max_results=0)
                 if group_err:
                     log.warning("fetch_role_members: could not resolve group %r: %s", group_name, group_err)
                     continue
-                account_ids.extend(m["accountId"] for m in members)
-            # Deduplicate while preserving order
+                users.extend(members)
+            # Deduplicate by accountId while preserving order
             seen: set = set()
-            unique_ids = []
-            for aid in account_ids:
+            unique: List[dict] = []
+            for u in users:
+                aid = u["accountId"]
                 if aid not in seen:
                     seen.add(aid)
-                    unique_ids.append(aid)
-            log.info("fetch_role_members: role_id=%d → %d members (incl. group-resolved)", role_id, len(unique_ids))
-            return unique_ids, None
+                    unique.append(u)
+            log.info("fetch_role_members: role_id=%d → %d members (incl. group-resolved)", role_id, len(unique))
+            return unique, None
         except requests.RequestException as exc:
             log.error("fetch_role_members exception: %s", exc)
             return [], str(exc)
@@ -409,11 +416,12 @@ class JiraClient:
             log.error("fetch_teams exception: %s", exc)
             return [], str(exc)
 
-    def fetch_team_members(self, team_id: str, max_results: int = 500) -> Tuple[List[dict], Optional[str]]:
+    def fetch_team_members(self, team_id: str, max_results: int = 0) -> Tuple[List[dict], Optional[str]]:
         """Fetch members of an Atlassian Team.
 
         GET /gateway/api/public/teams/v1/org/{orgId}/teams/{teamId}/members
-        Returns [{accountId}] list. Paginates via nextCursor.
+        Returns [{accountId}] list. Paginates via nextCursor until all members fetched.
+        Pass max_results > 0 to cap the total.
         """
         if not self._org_id:
             return [], "Atlassian Org ID not configured — set it in Settings"
@@ -438,19 +446,20 @@ class JiraClient:
                     if account_id:
                         members.append({"accountId": account_id})
                 cursor = data.get("nextCursor")
-                if not cursor or not data.get("results") or len(members) >= max_results:
+                if not cursor or not data.get("results") or (max_results > 0 and len(members) >= max_results):
                     break
-            log.info("fetch_team_members: team_id=%r → %d members", team_id, len(members))
-            return members[:max_results], None
+            result = members[:max_results] if max_results > 0 else members
+            log.info("fetch_team_members: team_id=%r → %d members", team_id, len(result))
+            return result, None
         except requests.RequestException as exc:
             log.error("fetch_team_members exception: %s", exc)
             return [], str(exc)
 
-    def fetch_group_members(self, group_name: str, max_results: int = 200) -> Tuple[List[dict], Optional[str]]:
+    def fetch_group_members(self, group_name: str, max_results: int = 0) -> Tuple[List[dict], Optional[str]]:
         """Fetch members of a Jira group via GET /group/member.
 
         Returns (users, error_message). users is [{accountId, displayName, emailAddress}].
-        Paginates automatically up to max_results total members.
+        Paginates until all members are fetched. Pass max_results > 0 to cap the total.
         """
         try:
             users: List[dict] = []
@@ -478,13 +487,56 @@ class JiraClient:
                             "displayName": u.get("displayName", ""),
                             "emailAddress": u.get("emailAddress", ""),
                         })
-                if not page or data.get("isLast", False) or len(users) >= max_results:
+                if not page or data.get("isLast", False) or (max_results > 0 and len(users) >= max_results):
                     break
                 start_at += len(page)
-            log.info("fetch_group_members: group=%r → %d members", group_name, len(users))
-            return users[:max_results], None
+            result = users[:max_results] if max_results > 0 else users
+            log.info("fetch_group_members: group=%r → %d members", group_name, len(result))
+            return result, None
         except requests.RequestException as exc:
             log.error("fetch_group_members exception: %s", exc)
+            return [], str(exc)
+
+    def resolve_users_bulk(self, account_ids: List[str]) -> Tuple[List[dict], Optional[str]]:
+        """Resolve a list of accountIds to full user dicts via GET /rest/api/3/user/bulk.
+
+        Processes in batches of 200. Returns [{accountId, displayName, emailAddress}].
+        If the bulk endpoint is unavailable (permissions), falls back to individual lookups.
+        """
+        if not account_ids:
+            return [], None
+        try:
+            resolved: List[dict] = []
+            batch_size = 200
+            for i in range(0, len(account_ids), batch_size):
+                batch = account_ids[i:i + batch_size]
+                params = [("accountId", aid) for aid in batch]
+                params.append(("maxResults", batch_size))
+                resp = self._request(
+                    "GET", self._url("user/bulk"),
+                    label="resolve_users_bulk",
+                    params=params,
+                    timeout=15,
+                )
+                if resp.status_code == 403:
+                    log.warning("resolve_users_bulk: permission denied for bulk lookup — returning partial data")
+                    for aid in account_ids:
+                        resolved.append({"accountId": aid, "displayName": aid, "emailAddress": ""})
+                    return resolved, None
+                if resp.status_code != 200:
+                    return [], self._log_error("resolve_users_bulk", resp)
+                data = resp.json()
+                for u in data.get("values", []):
+                    if not u.get("accountType", "").startswith("app"):
+                        resolved.append({
+                            "accountId": u["accountId"],
+                            "displayName": u.get("displayName", ""),
+                            "emailAddress": u.get("emailAddress", ""),
+                        })
+            log.info("resolve_users_bulk: resolved %d of %d account IDs", len(resolved), len(account_ids))
+            return resolved, None
+        except requests.RequestException as exc:
+            log.error("resolve_users_bulk exception: %s", exc)
             return [], str(exc)
 
     def fetch_projects(self) -> Tuple[List[dict], Optional[str]]:

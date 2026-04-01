@@ -32,6 +32,103 @@ def index():
     )
 
 
+def _build_assignee_list(client, project_scope, role_id_raw, group_name, team_id, query, max_results, emit=None):
+    """Build the assignee list using a source-based pipeline.
+
+    When a role, group, or team is selected, those are used as the PRIMARY source of members
+    (all members fetched, no cap). Multiple sources are unioned then deduplicated; if multiple
+    sources are selected, only members present in ALL sources are kept (AND semantics).
+    When no source is selected, falls back to Jira's assignable search (capped at max_results).
+
+    emit: optional callable(str) for progress messages.
+    Returns (users, error_message).
+    """
+    def _emit(msg):
+        if emit:
+            emit(msg)
+
+    role_id = None
+    if role_id_raw:
+        try:
+            role_id = int(role_id_raw)
+        except ValueError:
+            log.warning("_build_assignee_list: invalid role_id_raw=%r, role source skipped", role_id_raw)
+
+    has_source = bool(role_id or group_name or team_id)
+
+    if has_source:
+        # Collect full user dicts from each selected source
+        source_sets: list = []  # list of sets of accountIds per source
+        all_users: dict = {}    # accountId -> user dict (last write wins for displayName/email)
+
+        if role_id:
+            _emit("Fetching role members from Jira...")
+            role_users, role_err = client.fetch_role_members(role_id, project_key=project_scope)
+            if role_err:
+                return [], f"Failed to fetch role members: {role_err}"
+            _emit(f"Found {len(role_users)} members in role")
+            for u in role_users:
+                all_users[u["accountId"]] = u
+            source_sets.append({u["accountId"] for u in role_users})
+
+        if group_name:
+            _emit(f"Fetching all members of group '{group_name}'...")
+            group_users, group_err = client.fetch_group_members(group_name, max_results=0)
+            if group_err:
+                return [], f"Failed to fetch group members: {group_err}"
+            _emit(f"Found {len(group_users)} members in group")
+            for u in group_users:
+                all_users[u["accountId"]] = u
+            source_sets.append({u["accountId"] for u in group_users})
+
+        if team_id:
+            _emit("Fetching all Atlassian Team members...")
+            team_members, team_err = client.fetch_team_members(team_id, max_results=0)
+            if team_err:
+                return [], f"Failed to fetch team members: {team_err}"
+            _emit(f"Found {len(team_members)} members in team, resolving user details...")
+            team_ids = [m["accountId"] for m in team_members]
+            resolved, res_err = client.resolve_users_bulk(team_ids)
+            if res_err:
+                return [], f"Failed to resolve team member details: {res_err}"
+            for u in resolved:
+                all_users[u["accountId"]] = u
+            source_sets.append({u["accountId"] for u in team_members})
+
+        # If multiple sources, keep only users present in ALL sources (AND intersection)
+        if len(source_sets) > 1:
+            _emit("Intersecting sources...")
+            common_ids = source_sets[0].intersection(*source_sets[1:])
+            users = [all_users[aid] for aid in common_ids if aid in all_users]
+            log.info("_build_assignee_list: intersection of %d sources → %d users", len(source_sets), len(users))
+        else:
+            users = list(all_users.values())
+
+        # Deduplicate by accountId (preserve first occurrence)
+        seen: set = set()
+        unique = []
+        for u in users:
+            if u["accountId"] not in seen:
+                seen.add(u["accountId"])
+                unique.append(u)
+        users = unique
+
+        # Apply optional name/email post-filter
+        if query:
+            q = query.lower()
+            users = [u for u in users if q in u.get("displayName", "").lower() or q in u.get("emailAddress", "").lower()]
+            log.info("_build_assignee_list: after name/email filter=%r → %d users", query, len(users))
+
+    else:
+        # No sources selected — use Jira's assignable search (legacy behaviour)
+        _emit("Fetching assignable users from Jira...")
+        users, err = client.fetch_assignees(project_key=project_scope, query=query, max_results=max_results)
+        if err:
+            return [], f"Failed to fetch assignees: {err}"
+
+    return users, None
+
+
 @bp.route("/refresh-assignees", methods=["POST"])
 def refresh_assignees():
     cfg = load_config()
@@ -43,6 +140,7 @@ def refresh_assignees():
     session["tools_last_project"] = project_scope or cfg.project_key
     role_id_raw = request.form.get("filter_role_id", "").strip()
     group_name = request.form.get("filter_group_name", "").strip()
+    team_id = request.form.get("filter_team_id", "").strip()
     query = request.form.get("filter_query", "").strip() or None
     max_results_raw = request.form.get("filter_max_results", "50").strip()
 
@@ -52,58 +150,13 @@ def refresh_assignees():
         max_results = 50
 
     client = JiraClient(cfg, verbose=cfg.verbose_logging)
-
-    # Step 1: base pool from assignable search
-    users, err = client.fetch_assignees(project_key=project_scope, query=query, max_results=max_results)
+    users, err = _build_assignee_list(client, project_scope, role_id_raw, group_name, team_id, query, max_results)
     if err:
-        flash(f"Failed to fetch assignees: {err}", "danger")
+        flash(err, "danger")
         return redirect(url_for("tools.index"))
 
-    filters_applied = bool(query)
-
-    # Step 2: intersect with role members if role selected
-    if role_id_raw:
-        try:
-            role_id = int(role_id_raw)
-        except ValueError:
-            log.warning("refresh_assignees: invalid role_id_raw=%r, role filter skipped", role_id_raw)
-            role_id = None
-        if role_id is not None:
-            role_ids, role_err = client.fetch_role_members(role_id, project_key=project_scope)
-            if role_err:
-                flash(f"Warning: Could not fetch role members ({role_err}). Role filter skipped.", "warning")
-            else:
-                role_set = set(role_ids)
-                users = [u for u in users if u["accountId"] in role_set]
-                filters_applied = True
-                log.info("refresh_assignees: after role filter → %d users", len(users))
-
-    # Step 3: intersect with group members if group provided
-    if group_name:
-        group_users, group_err = client.fetch_group_members(group_name)
-        if group_err:
-            flash(f"Warning: Could not fetch group '{group_name}' ({group_err}). Group filter skipped.", "warning")
-        else:
-            group_ids = {u["accountId"] for u in group_users}
-            users = [u for u in users if u["accountId"] in group_ids]
-            filters_applied = True
-            log.info("refresh_assignees: after group filter → %d users", len(users))
-
-    # Step 4: intersect with Atlassian Team members if team selected
-    team_id = request.form.get("filter_team_id", "").strip()
-    if team_id:
-        team_members, team_err = client.fetch_team_members(team_id)
-        if team_err:
-            flash(f"Warning: Could not fetch team members ({team_err}). Team filter skipped.", "warning")
-        else:
-            team_account_ids = {m["accountId"] for m in team_members}
-            users = [u for u in users if u["accountId"] in team_account_ids]
-            filters_applied = True
-            log.info("refresh_assignees: after team filter → %d users", len(users))
-
-    # Guard: don't wipe cache if filters were applied but yielded nothing
-    if not users and filters_applied:
-        flash("All filters combined returned 0 users — cache not updated. Relax your filters and try again.", "warning")
+    if not users:
+        flash("No users found — cache not updated. Check your source selection and try again.", "warning")
         return redirect(url_for("tools.index"))
 
     label = project_scope or cfg.project_key
@@ -239,53 +292,21 @@ def _run_refresh_assignees(cfg, op_id, params):
         callback = lambda evt: emit_event(op_id, evt)
         client = JiraClient(cfg, verbose=True, event_callback=callback)
 
-        # Step 1: fetch base pool
-        emit_event(op_id, {"type": "status", "message": "Fetching assignable users from Jira..."})
-        users, err = client.fetch_assignees(project_key=project_scope, query=query, max_results=max_results)
+        def emit_status(msg):
+            emit_event(op_id, {"type": "status", "message": msg})
+
+        users, err = _build_assignee_list(
+            client, project_scope, role_id_raw, group_name, team_id, query, max_results,
+            emit=emit_status,
+        )
         if err:
-            emit_event(op_id, {"type": "error", "message": f"Failed to fetch assignees: {err}"})
+            emit_event(op_id, {"type": "error", "message": err})
             return
 
-        filters_applied = bool(query)
-        emit_event(op_id, {"type": "status", "message": f"Found {len(users)} base users, applying filters..."})
-
-        # Step 2: role filter
-        if role_id_raw:
-            try:
-                role_id = int(role_id_raw)
-            except ValueError:
-                role_id = None
-            if role_id is not None:
-                emit_event(op_id, {"type": "status", "message": "Filtering by project role..."})
-                role_ids, role_err = client.fetch_role_members(role_id, project_key=project_scope)
-                if not role_err:
-                    role_set = set(role_ids)
-                    users = [u for u in users if u["accountId"] in role_set]
-                    filters_applied = True
-
-        # Step 3: group filter
-        if group_name:
-            emit_event(op_id, {"type": "status", "message": f"Filtering by group '{group_name}'..."})
-            group_users, group_err = client.fetch_group_members(group_name)
-            if not group_err:
-                group_ids = {u["accountId"] for u in group_users}
-                users = [u for u in users if u["accountId"] in group_ids]
-                filters_applied = True
-
-        # Step 4: team filter
-        if team_id:
-            emit_event(op_id, {"type": "status", "message": "Filtering by Atlassian Team..."})
-            team_members, team_err = client.fetch_team_members(team_id)
-            if not team_err:
-                team_account_ids = {m["accountId"] for m in team_members}
-                users = [u for u in users if u["accountId"] in team_account_ids]
-                filters_applied = True
-
-        # Guard
-        if not users and filters_applied:
+        if not users:
             emit_event(op_id, {
                 "type": "error",
-                "message": "All filters combined returned 0 users — cache not updated.",
+                "message": "No users found — cache not updated. Check your source selection.",
             })
             return
 

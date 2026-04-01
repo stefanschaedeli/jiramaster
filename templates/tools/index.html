@@ -10,7 +10,7 @@
     <div class="card h-100">
       <div class="card-header fw-semibold">Refresh Assignees</div>
       <div class="card-body d-flex flex-column">
-        <p class="card-text">Download and cache the list of assignable users from a Jira project. Use the scope selector to fetch from a different project.</p>
+        <p class="card-text">Download and cache assignees for your project. Select a role, group, or team to export <strong>all</strong> their members. Leave all sources blank to use Jira's assignable users list (limited to Max Results).</p>
         <div class="mb-3">
           {% if assignees %}
             <span class="text-success">✓</span>
@@ -47,18 +47,18 @@
             <div id="projects-load-error" class="text-danger small mt-1" style="display:none;"></div>
           </div>
 
-          <!-- Filter Options -->
+          <!-- Member Source -->
           <div class="mb-3">
-            <div class="small fw-semibold text-muted mb-2">Filter Options</div>
+            <div class="small fw-semibold text-muted mb-2">Member Source</div>
             <div id="assignee-filters">
               <div class="border rounded p-3 bg-light">
 
-                <!-- Role filter -->
+                <!-- Role source -->
                 <div class="mb-2">
                   <label class="form-label small fw-semibold mb-1">Project Role</label>
                   <div class="d-flex gap-2">
                     <select name="filter_role_id" id="role-select" class="form-select form-select-sm">
-                      <option value="">— no role filter —</option>
+                      <option value="">— no role source —</option>
                     </select>
                     <button type="button" id="load-roles-btn" class="btn btn-sm btn-outline-secondary text-nowrap">
                       Load Roles
@@ -67,12 +67,12 @@
                   <div id="roles-load-error" class="text-danger small mt-1" style="display:none;"></div>
                 </div>
 
-                <!-- Group filter -->
+                <!-- Group source -->
                 <div class="mb-2">
-                  <label class="form-label small fw-semibold mb-1">Group / Team</label>
+                  <label class="form-label small fw-semibold mb-1">Group</label>
                   <div class="d-flex gap-2">
                     <select name="filter_group_name" id="group-select" class="form-select form-select-sm">
-                      <option value="">— no group filter —</option>
+                      <option value="">— no group source —</option>
                     </select>
                     <button type="button" id="load-groups-btn" class="btn btn-sm btn-outline-secondary text-nowrap">
                       Load Groups
@@ -81,13 +81,13 @@
                   <div id="groups-load-error" class="text-danger small mt-1" style="display:none;"></div>
                 </div>
 
-                <!-- Atlassian Team filter -->
+                <!-- Atlassian Team source -->
                 <div class="mb-2">
                   <label class="form-label small fw-semibold mb-1">Atlassian Team</label>
                   {% if cfg and cfg.org_id %}
                   <div class="d-flex gap-2">
                     <select name="filter_team_id" id="team-select" class="form-select form-select-sm">
-                      <option value="">— no team filter —</option>
+                      <option value="">— no team source —</option>
                     </select>
                     <button type="button" id="load-teams-btn" class="btn btn-sm btn-outline-secondary text-nowrap">
                       Load Teams
@@ -102,19 +102,20 @@
                   {% endif %}
                 </div>
 
-                <!-- Name/email query -->
-                <div class="mb-2">
+                <!-- Name/email filter (shown only in assignable search mode) -->
+                <div id="name-filter-row" class="mb-2">
                   <label class="form-label small fw-semibold mb-1">Name / Email Filter</label>
                   <input type="text" name="filter_query" class="form-control form-control-sm"
                          placeholder="Partial name or email address">
+                  <div class="form-text">Applied as a post-filter when using a role/group/team source.</div>
                 </div>
 
-                <!-- Max results -->
-                <div>
+                <!-- Max results (shown only in assignable search mode) -->
+                <div id="max-results-row">
                   <label class="form-label small fw-semibold mb-1">Max Results</label>
                   <input type="number" name="filter_max_results" class="form-control form-control-sm"
                          value="50" min="10" max="200" style="width:90px;">
-                  <div class="form-text">10–200. Active filters are combined with AND logic.</div>
+                  <div class="form-text">10–200. Used only when no role, group, or team is selected.</div>
                 </div>
 
               </div>
@@ -292,6 +293,26 @@
       .finally(function () { loadGroupsBtn.disabled = false; });
   });
 
+  // ── Source-mode visibility toggle ──
+  const maxResultsRow = document.getElementById('max-results-row');
+  const nameFilterNote = document.querySelector('#name-filter-row .form-text');
+  const sourceNote_default = 'Applied as a post-filter when using a role/group/team source.';
+  const sourceNote_assignable = 'Passed to Jira\u2019s assignable user search.';
+
+  function updateSourceMode() {
+    var hasSource = (
+      (roleSelect && roleSelect.value) ||
+      (groupSelect && groupSelect.value) ||
+      (typeof teamSelect !== 'undefined' && teamSelect && teamSelect.value)
+    );
+    if (maxResultsRow) maxResultsRow.style.display = hasSource ? 'none' : '';
+    if (nameFilterNote) nameFilterNote.textContent = hasSource ? sourceNote_default : sourceNote_assignable;
+  }
+
+  roleSelect.addEventListener('change', updateSourceMode);
+  groupSelect.addEventListener('change', updateSourceMode);
+  updateSourceMode();
+
   {% if cfg and cfg.org_id %}
   const teamSelect = document.getElementById('team-select');
   const loadTeamsBtn = document.getElementById('load-teams-btn');
@@ -317,7 +338,7 @@
         if (teams.length === 0) {
           teamSelect.innerHTML = '<option value="">— no teams found —</option>';
         } else {
-          teamSelect.innerHTML = '<option value="">— no team filter —</option>';
+          teamSelect.innerHTML = '<option value="">— no team source —</option>';
           teams.forEach(function (t) {
             const opt = document.createElement('option');
             opt.value = t.teamId;
@@ -334,6 +355,7 @@
       })
       .finally(function () { loadTeamsBtn.disabled = false; });
   });
+  teamSelect.addEventListener('change', updateSourceMode);
   {% endif %}
 
   // ── Loading overlay interceptors ──
