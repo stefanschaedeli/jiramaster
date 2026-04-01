@@ -7,7 +7,7 @@
 
 {% set cache_defs = [
   ('assignees', 'Assignees', caches.assignees, 'accountId', ['Display Name', 'Email', 'Account ID']),
-  ('labels',    'Labels',    caches.labels,    None,         ['Label']),
+  ('labels',    'Labels',    caches.labels,    None,         ['Label', 'Usage']),
   ('projects',  'Projects',  caches.projects,  'key',        ['Key', 'Name']),
 ] %}
 
@@ -58,12 +58,23 @@
               {% endfor %}
             {% elif cache_type == 'labels' %}
               {% for item in meta['items'] %}
-              <tr data-item-id="{{ item }}">
-                <td class="ps-3">{{ item }}</td>
+              <tr data-item-id="{{ item.name }}">
+                <td class="ps-3">{{ item.name }}</td>
+                <td>
+                  <span class="usage-display">{{ item.count if item.count is not none else '—' }}</span>
+                  <input type="number" class="usage-input form-control form-control-sm d-none"
+                         style="width:90px;display:none!important"
+                         min="0" value="{{ item.count if item.count is not none else '' }}"
+                         data-label-name="{{ item.name }}">
+                  <button class="btn btn-sm btn-link p-0 ms-1 usage-edit-btn" title="Edit usage">&#9998;</button>
+                  <button class="btn btn-sm btn-link p-0 ms-1 usage-save-btn d-none" title="Save">&#10003;</button>
+                  <button class="btn btn-sm btn-link p-0 ms-1 usage-cancel-btn d-none" title="Cancel">&#10005;</button>
+                  <span class="usage-err text-danger small ms-1"></span>
+                </td>
                 <td class="text-end pe-3">
                   <button class="btn btn-sm btn-outline-danger delete-btn"
                           data-cache-type="{{ cache_type }}"
-                          data-item-id="{{ item }}">Delete</button>
+                          data-item-id="{{ item.name }}">Delete</button>
                 </td>
               </tr>
               {% endfor %}
@@ -135,6 +146,76 @@
         .catch(function (err) {
           showError(btn, err.message);
           btn.disabled = false;
+        });
+    });
+  });
+
+  document.querySelectorAll('.usage-edit-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const td = btn.closest('td');
+      td.querySelector('.usage-display').classList.add('d-none');
+      const input = td.querySelector('.usage-input');
+      input.style.removeProperty('display');
+      input.classList.remove('d-none');
+      btn.classList.add('d-none');
+      td.querySelector('.usage-save-btn').classList.remove('d-none');
+      td.querySelector('.usage-cancel-btn').classList.remove('d-none');
+      input.focus();
+    });
+  });
+
+  function cancelUsageEdit(td, originalValue) {
+    td.querySelector('.usage-display').classList.remove('d-none');
+    const input = td.querySelector('.usage-input');
+    input.classList.add('d-none');
+    input.style.setProperty('display', 'none', 'important');
+    input.value = originalValue;
+    td.querySelector('.usage-edit-btn').classList.remove('d-none');
+    td.querySelector('.usage-save-btn').classList.add('d-none');
+    td.querySelector('.usage-cancel-btn').classList.add('d-none');
+    td.querySelector('.usage-err').textContent = '';
+  }
+
+  document.querySelectorAll('.usage-cancel-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const td = btn.closest('td');
+      const display = td.querySelector('.usage-display');
+      cancelUsageEdit(td, display.textContent.trim() === '—' ? '' : display.textContent.trim());
+    });
+  });
+
+  document.querySelectorAll('.usage-save-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const td = btn.closest('td');
+      const input = td.querySelector('.usage-input');
+      const labelName = input.dataset.labelName;
+      const rawVal = input.value.trim();
+      const count = rawVal === '' ? null : parseInt(rawVal, 10);
+      if (rawVal !== '' && isNaN(count)) {
+        td.querySelector('.usage-err').textContent = 'Invalid number';
+        return;
+      }
+      btn.disabled = true;
+
+      fetch('/cache/update/labels/' + encodeURIComponent(labelName), {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ count: count }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          btn.disabled = false;
+          if (data.ok) {
+            const display = td.querySelector('.usage-display');
+            display.textContent = count === null ? '—' : count;
+            cancelUsageEdit(td, rawVal);
+          } else {
+            td.querySelector('.usage-err').textContent = data.error || 'Failed';
+          }
+        })
+        .catch(function (err) {
+          btn.disabled = false;
+          td.querySelector('.usage-err').textContent = err.message;
         });
     });
   });

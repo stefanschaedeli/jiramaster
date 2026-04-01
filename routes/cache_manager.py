@@ -49,6 +49,30 @@ def delete_item(cache_type: str, item_id: str):
     return jsonify({"ok": True})
 
 
+@bp.route("/update/labels/<path:label_name>", methods=["POST"])
+def update_label(label_name: str):
+    """Update the usage count for a single label. Body: {count: int|null}."""
+    data = request.get_json(silent=True) or {}
+    count = data.get("count")  # None means clear the count
+    if count is not None and not isinstance(count, int):
+        return jsonify({"error": "count must be an integer or null"}), 400
+
+    meta = load_label_cache_meta()
+    updated = False
+    for item in meta.get("items", []):
+        if item.get("name") == label_name:
+            item["count"] = count
+            updated = True
+            break
+
+    if not updated:
+        return jsonify({"error": "Label not found"}), 404
+
+    save_label_cache(meta["items"])
+    log.info("cache_manager: updated label %s count=%s", label_name, count)
+    return jsonify({"ok": True})
+
+
 @bp.route("/clear/<cache_type>", methods=["POST"])
 def clear_cache(cache_type: str):
     """Wipe an entire cache. Returns JSON {ok: true} or {error: ...}."""
