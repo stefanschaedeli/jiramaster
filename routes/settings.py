@@ -28,6 +28,26 @@ def _validate_settings(form) -> list:
     return errors
 
 
+def _cfg_from_form(form, existing: JiraConfig = None) -> JiraConfig:
+    """Build a JiraConfig from form data, preserving labels from existing config."""
+    return JiraConfig(
+        base_url=form.get("base_url", "").strip().rstrip("/"),
+        username=form.get("username", "").strip(),
+        api_token=form.get("api_token", "").strip(),
+        project_key=form.get("project_key", "").strip().upper(),
+        ac_field_id=form.get("ac_field_id", existing.ac_field_id if existing else "").strip(),
+        proxy_url=form.get("proxy_url", "").strip(),
+        org_id=form.get("org_id", "").strip(),
+        labels=existing.labels if existing else [],
+    )
+
+
+def _render_settings(cfg: JiraConfig):
+    return render_template("settings/index.html", cfg=cfg,
+                           assignees=load_assignees(),
+                           security=get_security_status())
+
+
 @bp.route("/", methods=["GET"])
 def index():
     cfg = load_config()
@@ -42,25 +62,18 @@ def save():
     base_url = request.form.get("base_url", "").strip().rstrip("/")
     if base_url and not base_url.startswith("https://"):
         flash("Jira Base URL must start with https://", "danger")
-        return redirect(url_for("settings.index"))
+        return _render_settings(_cfg_from_form(request.form, load_config()))
     proxy_url = request.form.get("proxy_url", "").strip()
     if proxy_url and not (proxy_url.startswith("http://") or proxy_url.startswith("https://")):
         flash("Proxy URL must start with http:// or https://", "danger")
-        return redirect(url_for("settings.index"))
-    for err in _validate_settings(request.form):
-        flash(err, "danger")
-        return redirect(url_for("settings.index"))
+        return _render_settings(_cfg_from_form(request.form, load_config()))
+    errors = _validate_settings(request.form)
+    if errors:
+        for err in errors:
+            flash(err, "danger")
+        return _render_settings(_cfg_from_form(request.form, load_config()))
     existing = load_config()
-    cfg = JiraConfig(
-        base_url=base_url,
-        username=request.form.get("username", "").strip(),
-        api_token=request.form.get("api_token", "").strip(),
-        project_key=request.form.get("project_key", "").strip().upper(),
-        ac_field_id=request.form.get("ac_field_id", existing.ac_field_id).strip(),
-        proxy_url=proxy_url,
-        org_id=request.form.get("org_id", "").strip(),
-        labels=existing.labels,
-    )
+    cfg = _cfg_from_form(request.form, existing)
     save_config(cfg)
     flash("Settings saved.", "success")
     return redirect(url_for("settings.index"))
@@ -99,34 +112,21 @@ def test_connection():
     base_url = request.form.get("base_url", "").strip().rstrip("/")
     if base_url and not base_url.startswith("https://"):
         flash("Jira Base URL must start with https://", "danger")
-        cfg = JiraConfig()
-        return render_template("settings/index.html", cfg=cfg,
-                               assignees=load_assignees(),
-                               security=get_security_status())
+        return _render_settings(_cfg_from_form(request.form))
     proxy_url = request.form.get("proxy_url", "").strip()
     if proxy_url and not (proxy_url.startswith("http://") or proxy_url.startswith("https://")):
         flash("Proxy URL must start with http:// or https://", "danger")
-        cfg = JiraConfig()
-        return render_template("settings/index.html", cfg=cfg,
-                               assignees=load_assignees(),
-                               security=get_security_status())
-    for err in _validate_settings(request.form):
-        flash(err, "danger")
-        return redirect(url_for("settings.index"))
-    cfg = JiraConfig(
-        base_url=base_url,
-        username=request.form.get("username", "").strip(),
-        api_token=request.form.get("api_token", "").strip(),
-        project_key=request.form.get("project_key", "").strip().upper(),
-        proxy_url=proxy_url,
-        org_id=request.form.get("org_id", "").strip(),
-    )
+        return _render_settings(_cfg_from_form(request.form))
+    errors = _validate_settings(request.form)
+    if errors:
+        for err in errors:
+            flash(err, "danger")
+        return _render_settings(_cfg_from_form(request.form))
+    cfg = _cfg_from_form(request.form)
     client = JiraClient(cfg)
     ok, msg = client.test_connection()
     if ok:
         flash(f"Connection successful: {msg}", "success")
     else:
         flash(f"Connection failed: {msg}", "danger")
-    return render_template("settings/index.html", cfg=cfg,
-                           assignees=load_assignees(),
-                           security=get_security_status())
+    return _render_settings(cfg)
