@@ -132,20 +132,45 @@
 
   <div class="col-md-6">
     <div class="card h-100">
-      <div class="card-header fw-semibold">Refresh Labels</div>
+      <div class="card-header fw-semibold">Labels Cache</div>
       <div class="card-body d-flex flex-column">
-        <p class="card-text">Download and cache the most-used labels from your Jira project. Used to populate the label selector when editing issues.</p>
+        <p class="card-text">Download the most-used labels from Jira, or add labels manually. Used to populate the label selector when editing issues.</p>
+
+        <!-- Cached labels list -->
         <div class="mb-3">
           {% if label_cache %}
-            <span class="text-success">✓</span>
-            <span class="small text-muted">{{ label_cache|length }} labels cached</span>
+            <div class="small text-muted mb-2">{{ label_cache|length }} labels cached:</div>
+            <div class="d-flex flex-wrap gap-1" style="max-height:140px;overflow-y:auto;">
+              {% for lbl in label_cache %}
+              <form method="POST" action="{{ url_for('tools.remove_label') }}" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="label" value="{{ lbl }}">
+                <button type="submit" class="badge text-bg-secondary border-0 d-inline-flex align-items-center gap-1"
+                        style="cursor:pointer;font-size:.75rem;" title="Remove '{{ lbl }}'">
+                  {{ lbl }} <span aria-hidden="true">&times;</span>
+                </button>
+              </form>
+              {% endfor %}
+            </div>
           {% else %}
-            <span class="text-muted small">No cache — click Refresh to fetch from Jira</span>
+            <span class="text-muted small">No cache — click Refresh to fetch from Jira or add labels manually.</span>
           {% endif %}
         </div>
+
+        <!-- Manual add form -->
+        <form method="POST" action="{{ url_for('tools.add_label') }}" class="mb-3">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label class="form-label small fw-semibold">Add label manually</label>
+          <div class="d-flex gap-2">
+            <input type="text" name="label" class="form-control form-control-sm" placeholder="e.g. backend" maxlength="255" required>
+            <button type="submit" class="btn btn-sm btn-outline-secondary text-nowrap">Add Label</button>
+          </div>
+        </form>
+
+        <!-- Refresh from Jira -->
         <form method="POST" action="{{ url_for('tools.refresh_labels') }}" class="mt-auto">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="btn btn-outline-primary">Refresh Labels</button>
+          <button type="submit" class="btn btn-outline-primary">Refresh from Jira</button>
         </form>
       </div>
     </div>

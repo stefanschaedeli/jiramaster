@@ -8,7 +8,7 @@ from jira_client import JiraClient
 from assignees import load_assignees, save_assignees
 from labels import load_label_cache, save_label_cache
 from projects import load_projects, save_projects
-from operation_events import create_operation, emit_event, stream_events
+from operation_events import create_operation, emit_event, stream_events, abort_operation, is_aborted
 
 log = logging.getLogger(__name__)
 
@@ -224,6 +224,36 @@ def fetch_projects():
     return jsonify(projects)
 
 
+@bp.route("/add-label", methods=["POST"])
+def add_label():
+    label = request.form.get("label", "").strip()
+    if not label:
+        flash("Label cannot be empty.", "warning")
+        return redirect(url_for("tools.index"))
+    current = load_label_cache()
+    if label not in current:
+        current.append(label)
+        current.sort(key=str.lower)
+        save_label_cache(current)
+        flash(f"Label '{label}' added to cache.", "success")
+    else:
+        flash(f"Label '{label}' is already in the cache.", "info")
+    return redirect(url_for("tools.index"))
+
+
+@bp.route("/remove-label", methods=["POST"])
+def remove_label():
+    label = request.form.get("label", "").strip()
+    current = load_label_cache()
+    if label in current:
+        current.remove(label)
+        save_label_cache(current)
+        flash(f"Label '{label}' removed from cache.", "success")
+    else:
+        flash(f"Label '{label}' not found in cache.", "warning")
+    return redirect(url_for("tools.index"))
+
+
 @bp.route("/refresh-labels", methods=["POST"])
 def refresh_labels():
     cfg = load_config()
@@ -241,6 +271,13 @@ def refresh_labels():
 
 
 # ── SSE overlay endpoints ──
+
+@bp.route("/abort/<op_id>", methods=["POST"])
+def abort_operation_route(op_id):
+    """Signal a running operation to abort."""
+    found = abort_operation(op_id)
+    return jsonify({"aborted": found})
+
 
 @bp.route("/events/<op_id>")
 def operation_events_stream(op_id):
@@ -295,10 +332,18 @@ def _run_refresh_assignees(cfg, op_id, params):
         def emit_status(msg):
             emit_event(op_id, {"type": "status", "message": msg})
 
+        if is_aborted(op_id):
+            emit_event(op_id, {"type": "error", "message": "Operation aborted"})
+            return
+
         users, err = _build_assignee_list(
             client, project_scope, role_id_raw, group_name, team_id, query, max_results,
             emit=emit_status,
         )
+        if is_aborted(op_id):
+            emit_event(op_id, {"type": "error", "message": "Operation aborted"})
+            return
+
         if err:
             emit_event(op_id, {"type": "error", "message": err})
             return
@@ -345,6 +390,9 @@ def _run_refresh_labels(cfg, op_id):
 
         emit_event(op_id, {"type": "status", "message": "Fetching labels from Jira..."})
         fetched, err = client.fetch_labels()
+        if is_aborted(op_id):
+            emit_event(op_id, {"type": "error", "message": "Operation aborted"})
+            return
         if err:
             emit_event(op_id, {"type": "error", "message": f"Failed to fetch labels: {err}"})
             return
