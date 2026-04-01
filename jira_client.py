@@ -743,9 +743,10 @@ class JiraClient:
     ) -> Tuple[List[dict], Optional[str]]:
         """Count how many issues use each label and return [{name, count}] list.
 
-        Makes one API call per label (GET /rest/api/3/search with maxResults=1
-        to read the `total` field). Intentionally bounded by the cached label set
-        (typically 5–200 labels).
+        Makes one API call per label (POST /rest/api/3/issue/search with maxResults=0
+        to read the `total` field without fetching issue bodies). Uses POST to avoid
+        Jira Cloud returning 404 for GET requests with label values containing special
+        characters. Intentionally bounded by the cached label set (typically 5–200 labels).
 
         project_key: if set, scopes the JQL to that project only.
         emit: optional callable(str) for progress status messages.
@@ -765,10 +766,13 @@ class JiraClient:
                     jql = f'project = "{project_key}" AND labels = "{lbl}"'
                 else:
                     jql = f'labels = "{lbl}"'
+                # Use POST to avoid Jira Cloud returning 404 for GET requests with
+                # label values containing special characters (hyphens, underscores).
+                # maxResults=0 is sufficient — we only need the `total` field.
                 resp = self._request(
-                    "GET", self._url("issue/search"),
+                    "POST", self._url("issue/search"),
                     label="count_label_usage",
-                    params={"jql": jql, "maxResults": 1, "fields": "summary"},
+                    json={"jql": jql, "maxResults": 0, "fields": []},
                     timeout=10,
                 )
                 if resp.status_code == 200:
