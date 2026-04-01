@@ -1,3 +1,6 @@
+import os
+import subprocess
+import sys
 import threading
 
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, session, Response
@@ -15,6 +18,18 @@ log = logging.getLogger(__name__)
 bp = Blueprint("tools", __name__, url_prefix="/tools")
 
 
+def _git_version() -> str:
+    """Return the current short git commit hash, or 'unknown'."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=5
+        )
+        return result.stdout.strip() or "unknown"
+    except Exception:
+        return "unknown"
+
+
 @bp.route("/", methods=["GET"])
 def index():
     cfg = load_config()
@@ -29,6 +44,7 @@ def index():
         projects_cache=projects_cache,
         cfg=cfg,
         selected_project=selected_project,
+        git_version=_git_version(),
     )
 
 
@@ -268,6 +284,48 @@ def refresh_labels():
         save_label_cache(fetched)
         flash(f"Saved top {len(fetched)} most-used labels to labels.json.", "success")
     return redirect(url_for("tools.index"))
+
+
+# ── Update & restart ──
+
+@bp.route("/update-and-restart", methods=["POST"])
+def update_and_restart():
+    """Spawn the platform update script detached, then return so the browser gets a response."""
+    cfg = load_config()
+    if not cfg.is_configured():
+        return jsonify({"error": "Jira not configured"}), 400
+
+    scripts_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "scripts")
+    log_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs", "update.log")
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    log_file = open(log_path, "a")  # noqa: WPS515 — kept open; process takes ownership
+
+    try:
+        if sys.platform == "win32":
+            script = os.path.join(scripts_dir, "update.ps1")
+            cmd = ["powershell", "-ExecutionPolicy", "Bypass", "-File", script]
+            subprocess.Popen(
+                cmd,
+                stdout=log_file,
+                stderr=log_file,
+                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+                close_fds=True,
+            )
+        else:
+            script = os.path.join(scripts_dir, "update.sh")
+            subprocess.Popen(
+                ["bash", script],
+                stdout=log_file,
+                stderr=log_file,
+                start_new_session=True,
+                close_fds=True,
+            )
+    except Exception as exc:
+        log.exception("update_and_restart: failed to spawn update script: %s", exc)
+        return jsonify({"error": str(exc)}), 500
+
+    log.info("update_and_restart: detached update script spawned")
+    return jsonify({"ok": True})
 
 
 # ── SSE overlay endpoints ──

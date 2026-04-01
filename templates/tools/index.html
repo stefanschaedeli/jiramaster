@@ -176,6 +176,33 @@
     </div>
   </div>
 </div>
+
+<!-- Update & Restart -->
+<div class="row g-4 mt-0">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header fw-semibold">Update &amp; Restart</div>
+      <div class="card-body">
+        <p class="card-text">Pull the latest code from GitHub and restart JiraMaster. Your config, cache, and work files are preserved.</p>
+        {% if git_version %}
+        <p class="small text-muted mb-3">Current version: <code>{{ git_version }}</code></p>
+        {% endif %}
+        <button id="update-restart-btn" class="btn btn-outline-warning">Update &amp; Restart</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Update overlay (hidden until triggered) -->
+<div id="update-overlay" class="jm-overlay" style="display:none">
+  <div class="card jm-overlay-card shadow-lg">
+    <div class="card-body text-center">
+      <div class="spinner-border text-warning mb-3" role="status" aria-hidden="true"></div>
+      <h5 class="card-title mb-2" id="update-overlay-title">Updating JiraMaster&hellip;</h5>
+      <p class="text-muted small" id="update-overlay-msg">Pulling latest code and restarting. This page will reload automatically when the app is back.</p>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -419,6 +446,55 @@
       );
     });
   }
+  // ── Update & Restart ──
+  document.getElementById('update-restart-btn').addEventListener('click', function() {
+    if (!confirm('This will pull the latest code from GitHub and restart JiraMaster.\n\nYour browser will reconnect automatically. Continue?')) {
+      return;
+    }
+    var btn = this;
+    btn.disabled = true;
+
+    var overlay = document.getElementById('update-overlay');
+    overlay.style.display = '';
+
+    fetch('{{ url_for("tools.update_and_restart") }}', {
+      method: 'POST',
+      headers: { 'X-CSRFToken': csrfToken }
+    })
+    .then(function(resp) { return resp.json(); })
+    .then(function(data) {
+      if (data.error) {
+        overlay.style.display = 'none';
+        btn.disabled = false;
+        alert('Failed to start update: ' + data.error);
+        return;
+      }
+      // App will be killed shortly — poll until it responds again
+      document.getElementById('update-overlay-msg').textContent = 'Restarting\u2026 this page will reload automatically.';
+      var polls = 0;
+      var pollMax = 90; // ~3 minutes
+      var interval = setInterval(function() {
+        polls++;
+        fetch('/', { method: 'HEAD', cache: 'no-store' })
+          .then(function() {
+            clearInterval(interval);
+            location.href = '{{ url_for("tools.index") }}';
+          })
+          .catch(function() {
+            if (polls >= pollMax) {
+              clearInterval(interval);
+              document.getElementById('update-overlay-title').textContent = 'Taking longer than expected\u2026';
+              document.getElementById('update-overlay-msg').textContent = 'The app hasn\u2019t come back yet. Refresh manually when it\u2019s ready.';
+            }
+          });
+      }, 2000);
+    })
+    .catch(function(err) {
+      overlay.style.display = 'none';
+      btn.disabled = false;
+      alert('Request failed: ' + err.message);
+    });
+  });
 })();
 </script>
 {% endblock %}
