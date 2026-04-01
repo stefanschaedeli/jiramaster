@@ -117,7 +117,6 @@ See `.claude/rules/02-no-print-or-basicconfig.md` and `.claude/rules/04-logging-
 
 - `_work_path`, `_load_epics`, `_save_epics` are duplicated across `routes/edit.py`, `routes/import_view.py`, and `routes/upload.py` — should be extracted to `work_store.py`
 - `fetch_labels()` in `jira_client.py` makes one API call per label (N+1 problem)
-- No test suite exists — zero coverage
 - `SUBTASKS_FORMAT` in `prompt_builder.py` is defined but never used
 
 ## Development Notes
@@ -128,6 +127,42 @@ See `.claude/rules/02-no-print-or-basicconfig.md` and `.claude/rules/04-logging-
 - The `.work/` directory accumulates files — there is no automatic cleanup
 - `assignees.json` and `labels.json` are refreshed from Tools → "Refresh" buttons
 - SSL: `scripts/start.sh` (macOS) and `scripts/start.ps1` (Windows) merge system CA certs into certifi bundle; `jira_client.py` auto-detects via `REQUESTS_CA_BUNDLE` env var
+
+## Test Suite
+
+Tests live in `tests/` and use pytest. Run them with:
+
+```bash
+venv/bin/python3 -m pytest tests/ -v
+venv/bin/python3 -m pytest tests/ --cov=. --cov-report=term-missing
+```
+
+### Test file map
+
+| File | Module under test |
+|------|------------------|
+| `tests/test_models.py` | `models.py` — dataclass serialization, `is_configured()` |
+| `tests/test_parser.py` | `parser.py` — YAML/JSON parsing, fence stripping, priority normalization |
+| `tests/test_security_utils.py` | `security_utils.py` — all mask/sanitize functions |
+| `tests/test_config.py` | `config.py` — load/save with mock keyring and temp files |
+| `tests/test_work_store.py` | `work_store.py` — path validation, epic save/load, stale file cleanup |
+| `tests/test_prompt_builder.py` | `prompt_builder.py` — tuning instructions, build_prompt |
+| `tests/test_settings_route.py` | `routes/settings.py` — Flask integration: validation, form preservation, security headers |
+
+### Rules for maintaining the test suite
+
+1. **Tests run before every commit.** The `PreToolUse` hook in `.claude/settings.json` blocks `git commit` if pytest fails. Fix failing tests before committing.
+
+2. **Extend tests when you change code.** Any change to a tested module must include corresponding test updates:
+   - Bug fix → add a regression test that would have caught the bug
+   - New function or route → add tests covering the happy path and key error cases
+   - Changed validation logic → update/add tests for the new rules
+
+3. **New modules need a new test file.** If you add a new `.py` module with non-trivial logic, create `tests/test_<module>.py` for it.
+
+4. **Test isolation is mandatory.** Tests must never touch real `config.json`, the OS keyring, `.work/` files, or make network calls. Use `tmp_path` + `monkeypatch` for file I/O; use `unittest.mock.patch` for external services.
+
+5. **Test config lives in `pyproject.toml`** (`[tool.pytest.ini_options]`). The `pythonpath = ["."]` setting is required because all imports are flat (e.g. `from config import load_config`).
 
 ## Git Workflow
 
