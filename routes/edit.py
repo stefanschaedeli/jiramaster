@@ -1,3 +1,5 @@
+import time
+
 from flask import Blueprint, render_template, request, flash, redirect, url_for, session, jsonify
 
 from models import Epic, Story
@@ -6,6 +8,10 @@ from labels import load_label_cache
 from work_store import load_epics, save_epics, get_session_work_id
 from config import load_config
 from jira_client import JiraClient
+
+# In-memory TTL cache for full Jira label name list (avoids repeated fetches during an edit session)
+_label_names_cache: dict = {"timestamp": float("-inf"), "labels": []}
+_LABEL_NAMES_TTL = 60.0  # seconds
 
 bp = Blueprint("edit", __name__, url_prefix="/edit")
 
@@ -56,6 +62,40 @@ def assignees_search():
         # Degrade gracefully — return empty list rather than a 5xx
         return jsonify([])
     return jsonify(users)
+
+
+@bp.route("/labels")
+def labels_search():
+    """Live label search — returns JSON list of label strings.
+
+    GET /edit/labels?q=<term>
+    Searches the cached label list first; falls back to a Jira API fetch
+    (with a 60-second in-memory TTL) when cache results are insufficient.
+    """
+    q = request.args.get("q", "").strip()
+    if not q:
+        return jsonify([])
+
+    term = q.lower()
+    cached = load_label_cache()
+    matches = [lbl for lbl in cached if term in lbl.lower()]
+
+    cfg = load_config()
+    if cfg.is_configured() and len(matches) < 10:
+        global _label_names_cache
+        now = time.monotonic()
+        if now - _label_names_cache["timestamp"] > _LABEL_NAMES_TTL:
+            client = JiraClient(cfg)
+            all_names, err = client.fetch_label_names()
+            if not err:
+                _label_names_cache = {"timestamp": now, "labels": all_names}
+        for lbl in _label_names_cache["labels"]:
+            if term in lbl.lower() and lbl not in matches:
+                matches.append(lbl)
+                if len(matches) >= 20:
+                    break
+
+    return jsonify(matches[:20])
 
 
 @bp.route("/save", methods=["POST"])

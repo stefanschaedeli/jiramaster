@@ -77,6 +77,8 @@
             {% if label_cache %}
             <div class="col-md-6">
               <label class="form-label fw-semibold">Labels</label>
+              <input type="text" class="form-control form-control-sm mb-1 label-search"
+                     placeholder="Search labels…" autocomplete="off">
               <select name="epic_{{ i }}_labels" class="form-select" multiple size="4">
                 {% for lbl in label_cache %}
                   <option value="{{ lbl }}" {% if lbl in epic.labels %}selected{% endif %}>{{ lbl }}</option>
@@ -155,6 +157,8 @@
               {% if label_cache %}
               <div class="col-md-6">
                 <label class="form-label small fw-semibold">Labels</label>
+                <input type="text" class="form-control form-control-sm mb-1 label-search"
+                       placeholder="Search labels…" autocomplete="off">
                 <select name="story_{{ i }}_{{ j }}_labels" class="form-select form-select-sm" multiple size="4">
                   {% for lbl in label_cache %}
                     <option value="{{ lbl }}" {% if lbl in story.labels %}selected{% endif %}>{{ lbl }}</option>
@@ -302,6 +306,67 @@
     });
   }
   document.querySelectorAll('.assignee-search').forEach(initAssigneeSearch);
+
+  // Label search: filter cached options; live API fallback when cache is insufficient
+  function initLabelSearch(searchInput) {
+    var select = searchInput.closest('[class*="col-"]').querySelector('select[multiple]');
+    if (!select) { return; }
+
+    var debounceTimer = null;
+
+    searchInput.addEventListener('input', function () {
+      var term = searchInput.value.toLowerCase();
+
+      var visibleCount = 0;
+      Array.prototype.forEach.call(select.options, function (opt) {
+        var matches = opt.selected || opt.textContent.toLowerCase().indexOf(term) !== -1;
+        opt.style.display = matches ? '' : 'none';
+        if (matches) { visibleCount++; }
+      });
+
+      clearTimeout(debounceTimer);
+      if (term.length >= 2 && visibleCount < 3) {
+        debounceTimer = setTimeout(function () {
+          fetch('{{ url_for("edit.labels_search") }}?q=' + encodeURIComponent(searchInput.value))
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (labels) {
+              // Remove previously added live options that are not selected
+              var toRemove = [];
+              Array.prototype.forEach.call(select.options, function (opt) {
+                if (opt.dataset.live === '1' && !opt.selected) { toRemove.push(opt); }
+              });
+              toRemove.forEach(function (opt) { opt.parentNode.removeChild(opt); });
+
+              labels.forEach(function (lbl) {
+                for (var i = 0; i < select.options.length; i++) {
+                  if (select.options[i].value === lbl) { return; }
+                }
+                var opt = document.createElement('option');
+                opt.value = lbl;
+                opt.textContent = lbl;
+                opt.dataset.live = '1';
+                select.appendChild(opt);
+              });
+
+              // Re-apply current filter to newly added options
+              Array.prototype.forEach.call(select.options, function (opt) {
+                if (!opt.dataset.live) { return; }
+                opt.style.display = opt.textContent.toLowerCase().indexOf(term) !== -1 ? '' : 'none';
+              });
+            })
+            .catch(function () {});
+        }, 300);
+      } else if (term.length < 2) {
+        // Clear live options and show all cached options
+        var toRemove = [];
+        Array.prototype.forEach.call(select.options, function (opt) {
+          if (opt.dataset.live === '1' && !opt.selected) { toRemove.push(opt); }
+        });
+        toRemove.forEach(function (opt) { opt.parentNode.removeChild(opt); });
+      }
+    });
+  }
+  document.querySelectorAll('.label-search').forEach(initLabelSearch);
 })();
 </script>
 {% endblock %}

@@ -134,7 +134,7 @@
     <div class="card h-100">
       <div class="card-header fw-semibold">Labels Cache</div>
       <div class="card-body d-flex flex-column">
-        <p class="card-text">Download the most-used labels from Jira, or add labels manually. Used to populate the label selector when editing issues.</p>
+        <p class="card-text">Download the most-used labels from Jira, or add labels manually. Optionally scope to a project and filter by name or usage count.</p>
 
         <!-- Cached labels list -->
         <div class="mb-3">
@@ -167,9 +167,65 @@
           </div>
         </form>
 
-        <!-- Refresh from Jira -->
-        <form method="POST" action="{{ url_for('tools.refresh_labels') }}" class="mt-auto">
+        <!-- Refresh from Jira with filter options -->
+        <form method="POST" action="{{ url_for('tools.refresh_labels') }}" id="refresh-labels-form" class="mt-auto">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="label_project_scope" id="label-project-scope-hidden"
+                 value="{{ selected_label_project or (cfg.project_key if cfg else '') }}">
+
+          <div class="border rounded p-3 bg-light mb-3">
+            <div class="small fw-semibold text-muted mb-2">Filter Options</div>
+
+            <!-- Project scope -->
+            <div class="mb-2">
+              <label for="label-project-scope-select" class="form-label small fw-semibold mb-1">Project Scope</label>
+              <div class="d-flex gap-2">
+                {% set _lbl_default_key = cfg.project_key if cfg else '' %}
+                {% set _lbl_sel = selected_label_project or _lbl_default_key %}
+                <select id="label-project-scope-select" class="form-select form-select-sm">
+                  <option value="">— global (all projects) —</option>
+                  <option value="{{ _lbl_default_key }}"{% if _lbl_sel == _lbl_default_key and _lbl_default_key %} selected{% endif %}>
+                    {{ _lbl_default_key or '(not configured)' }} — configured default
+                  </option>
+                  {% for p in projects_cache %}
+                    {% if p.key != _lbl_default_key %}
+                      <option value="{{ p.key }}"{% if p.key == _lbl_sel %} selected{% endif %}>{{ p.key }} — {{ p.name }}</option>
+                    {% endif %}
+                  {% endfor %}
+                </select>
+                <button type="button" id="load-label-projects-btn" class="btn btn-sm btn-outline-secondary text-nowrap">
+                  Load Projects
+                </button>
+              </div>
+              <div id="label-projects-load-error" class="text-danger small mt-1" style="display:none;"></div>
+              <div class="form-text">Scope to a project for faster, more relevant results.</div>
+            </div>
+
+            <!-- Name filter -->
+            <div class="mb-2">
+              <label for="label-name-filter" class="form-label small fw-semibold mb-1">Name Filter</label>
+              <input type="text" name="label_name_filter" id="label-name-filter"
+                     class="form-control form-control-sm" placeholder="e.g. backend">
+              <div class="form-text">Only cache labels containing this text (case-insensitive).</div>
+            </div>
+
+            <!-- Top N -->
+            <div class="mb-2">
+              <label for="label-top-n" class="form-label small fw-semibold mb-1">Top N</label>
+              <input type="number" name="label_top_n" id="label-top-n"
+                     class="form-control form-control-sm" value="40" min="5" max="200" style="width:90px;">
+              <div class="form-text">Cache the N most-used labels (5–200).</div>
+            </div>
+
+            <!-- Min usage -->
+            <div>
+              <label for="label-min-usage" class="form-label small fw-semibold mb-1">Min Usage</label>
+              <input type="number" name="label_min_usage" id="label-min-usage"
+                     class="form-control form-control-sm" value="0" min="0" style="width:90px;">
+              <div class="form-text">Only cache labels used on at least this many issues. 0 = no minimum.</div>
+            </div>
+          </div>
+
           <button type="submit" class="btn btn-outline-primary">Refresh from Jira</button>
         </form>
       </div>
@@ -428,9 +484,55 @@
     );
   });
 
-  var labelsForm = document.querySelector('form[action="{{ url_for("tools.refresh_labels") }}"]');
-  if (labelsForm) {
-    labelsForm.addEventListener('submit', function(e) {
+  // ── Labels card: project dropdown & SSE wiring ──
+  const labelProjectSelect = document.getElementById('label-project-scope-select');
+  const labelProjectHidden = document.getElementById('label-project-scope-hidden');
+  const loadLabelProjectsBtn = document.getElementById('load-label-projects-btn');
+  const labelProjectsErrorDiv = document.getElementById('label-projects-load-error');
+
+  if (labelProjectSelect) {
+    labelProjectSelect.addEventListener('change', function () {
+      labelProjectHidden.value = labelProjectSelect.value;
+    });
+  }
+
+  if (loadLabelProjectsBtn) {
+    loadLabelProjectsBtn.addEventListener('click', function () {
+      loadLabelProjectsBtn.disabled = true;
+      loadLabelProjectsBtn.textContent = 'Loading\u2026';
+      labelProjectsErrorDiv.style.display = 'none';
+
+      fetch('{{ url_for("tools.fetch_projects") }}', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
+      })
+        .then(function (r) {
+          if (!r.ok) return r.json().then(function (d) { throw new Error(d.error || r.statusText); });
+          return r.json();
+        })
+        .then(function (projects) {
+          labelProjectSelect.innerHTML = '<option value="">— global (all projects) —</option>';
+          projects.forEach(function (p) {
+            var opt = document.createElement('option');
+            opt.value = p.key;
+            opt.textContent = p.key + ' \u2014 ' + p.name;
+            labelProjectSelect.appendChild(opt);
+          });
+          labelProjectHidden.value = labelProjectSelect.value;
+          loadLabelProjectsBtn.textContent = 'Reload Projects';
+        })
+        .catch(function (err) {
+          labelProjectsErrorDiv.textContent = 'Failed to load projects: ' + err.message;
+          labelProjectsErrorDiv.style.display = 'block';
+          loadLabelProjectsBtn.textContent = 'Load Projects';
+        })
+        .finally(function () { loadLabelProjectsBtn.disabled = false; });
+    });
+  }
+
+  var refreshLabelsForm = document.getElementById('refresh-labels-form');
+  if (refreshLabelsForm) {
+    refreshLabelsForm.addEventListener('submit', function(e) {
       e.preventDefault();
       var formData = new FormData(this);
       startOperation(

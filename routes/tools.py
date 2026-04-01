@@ -37,6 +37,7 @@ def index():
     label_cache = load_label_cache()
     projects_cache = load_projects()
     selected_project = session.get("tools_last_project")
+    selected_label_project = session.get("tools_last_label_project")
     return render_template(
         "tools/index.html",
         assignees=assignees,
@@ -44,6 +45,7 @@ def index():
         projects_cache=projects_cache,
         cfg=cfg,
         selected_project=selected_project,
+        selected_label_project=selected_label_project,
         git_version=_git_version(),
     )
 
@@ -276,8 +278,28 @@ def refresh_labels():
     if not cfg.is_configured():
         flash("Configure Jira settings first.", "warning")
         return redirect(url_for("settings.index"))
+
+    project_scope = request.form.get("label_project_scope", "").strip().upper() or None
+    session["tools_last_label_project"] = project_scope or cfg.project_key
+    name_filter = request.form.get("label_name_filter", "").strip() or None
+    top_n_raw = request.form.get("label_top_n", "40").strip()
+    min_usage_raw = request.form.get("label_min_usage", "0").strip()
+    try:
+        top_n = max(5, min(200, int(top_n_raw)))
+    except ValueError:
+        top_n = 40
+    try:
+        min_usage = max(0, int(min_usage_raw))
+    except ValueError:
+        min_usage = 0
+
     client = JiraClient(cfg, verbose=cfg.verbose_logging)
-    fetched, err = client.fetch_labels()
+    fetched, err = client.fetch_labels(
+        top_n=top_n,
+        project_key=project_scope,
+        name_filter=name_filter,
+        min_usage=min_usage,
+    )
     if err:
         flash(f"Failed to fetch labels: {err}", "danger")
     else:
@@ -434,24 +456,52 @@ def start_refresh_labels():
     if not cfg.is_configured():
         return jsonify({"error": "Jira not configured"}), 400
 
+    project_scope = request.form.get("label_project_scope", "").strip().upper() or None
+    session["tools_last_label_project"] = project_scope or cfg.project_key
+    name_filter = request.form.get("label_name_filter", "").strip() or None
+    top_n_raw = request.form.get("label_top_n", "40").strip()
+    min_usage_raw = request.form.get("label_min_usage", "0").strip()
+    try:
+        top_n = max(5, min(200, int(top_n_raw)))
+    except ValueError:
+        top_n = 40
+    try:
+        min_usage = max(0, int(min_usage_raw))
+    except ValueError:
+        min_usage = 0
+
     op_id = create_operation()
+    params = {
+        "project_scope": project_scope,
+        "name_filter": name_filter,
+        "top_n": top_n,
+        "min_usage": min_usage,
+    }
     thread = threading.Thread(
-        target=_run_refresh_labels, args=(cfg, op_id), daemon=True
+        target=_run_refresh_labels, args=(cfg, op_id, params), daemon=True
     )
     thread.start()
     return jsonify({"operation_id": op_id})
 
 
-def _run_refresh_labels(cfg, op_id):
+def _run_refresh_labels(cfg, op_id, params):
     """Background worker for label refresh with event emission."""
     try:
         callback = lambda evt: emit_event(op_id, evt)
         client = JiraClient(cfg, verbose=True, event_callback=callback,
                             abort_check=lambda: is_aborted(op_id))
 
-        emit_event(op_id, {"type": "status", "message": "Fetching labels from Jira..."})
+        def emit_status(msg):
+            emit_event(op_id, {"type": "status", "message": msg})
+
         try:
-            fetched, err = client.fetch_labels()
+            fetched, err = client.fetch_labels(
+                top_n=params["top_n"],
+                project_key=params["project_scope"],
+                name_filter=params["name_filter"],
+                min_usage=params["min_usage"],
+                emit=emit_status,
+            )
         except OperationAbortedError:
             emit_event(op_id, {"type": "error", "message": "Operation aborted"})
             return
