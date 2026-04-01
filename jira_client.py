@@ -112,7 +112,14 @@ class JiraClient:
         # For other errors, return Jira's structured error fields (field-level validation feedback)
         messages = body.get("errorMessages", [])
         errors = body.get("errors", {})
-        parts = list(messages) + [f"{k}: {v}" for k, v in errors.items()]
+        # errors may be a dict (standard Jira) or a list of dicts (Teams API)
+        if isinstance(errors, dict):
+            error_parts = [f"{k}: {v}" for k, v in errors.items()]
+        elif isinstance(errors, list):
+            error_parts = [e.get("message", str(e)) if isinstance(e, dict) else str(e) for e in errors]
+        else:
+            error_parts = []
+        parts = list(messages) + error_parts
         detail = "; ".join(parts) if parts else "See logs for details"
         return f"HTTP {resp.status_code} — {detail}"
 
@@ -138,11 +145,38 @@ class JiraClient:
             log.error("detect_ac_field exception: %s", exc)
             return None, str(exc)
 
-    def fetch_cloud_id(self) -> Tuple[Optional[str], Optional[str]]:
-        """Fetch the Atlassian Cloud ID (site ID) via GET /_edge/tenant_info.
+    def fetch_org_id(self) -> Tuple[Optional[str], Optional[str]]:
+        """Fetch the Atlassian Organization ID via GET /admin/v1/orgs.
 
-        This endpoint is available on all Jira Cloud instances without admin access.
-        The cloud ID is used as the Org ID for the Atlassian Teams API.
+        This returns the actual org ID needed for the Teams API, which is
+        distinct from the Cloud/Site ID returned by fetch_cloud_id().
+        Requires admin API access or the read:org:jira OAuth scope.
+
+        Returns (org_id, error_message). org_id is None on failure.
+        """
+        url = "https://api.atlassian.com/admin/v1/orgs"
+        try:
+            resp = self.session.get(url, timeout=10)
+            if resp.status_code != 200:
+                return None, f"HTTP {resp.status_code}: {resp.text[:200]}"
+            data = resp.json()
+            orgs = data.get("data", [])
+            if not orgs:
+                return None, "No organizations found. Admin API access or read:org:jira scope may be required."
+            org_id = orgs[0].get("id")
+            if not org_id:
+                return None, "Organization entry found but missing 'id' field."
+            log.info("fetch_org_id: orgId=%s (name=%s)", org_id, orgs[0].get("attributes", {}).get("name", ""))
+            return org_id, None
+        except requests.RequestException as exc:
+            log.error("fetch_org_id exception: %s", exc)
+            return None, str(exc)
+
+    def fetch_cloud_id(self) -> Tuple[Optional[str], Optional[str]]:
+        """Fetch the Atlassian Cloud/Site ID via GET /_edge/tenant_info.
+
+        NOTE: This returns the Cloud/Site ID, NOT the Organization ID needed
+        for the Teams API. Use fetch_org_id() for Teams API calls.
 
         Returns (cloud_id, error_message). cloud_id is None on failure.
         """

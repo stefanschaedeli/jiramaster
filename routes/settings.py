@@ -84,13 +84,13 @@ def detect_fields():
 def detect_org_id():
     cfg = load_config()
     client = JiraClient(cfg)
-    cloud_id, err = client.fetch_cloud_id()
-    if cloud_id:
-        cfg.org_id = cloud_id
+    org_id, err = client.fetch_org_id()
+    if org_id:
+        cfg.org_id = org_id
         save_config(cfg)
-        flash(f"Detected Org ID: {cloud_id}. Saved to config.", "success")
+        flash(f"Detected Org ID: {org_id}. Saved to config.", "success")
     else:
-        flash(f"Could not detect Org ID: {err}", "danger")
+        flash(f"Could not auto-detect Org ID: {err}. Enter it manually from admin.atlassian.com.", "warning")
     return redirect(url_for("settings.index"))
 
 
