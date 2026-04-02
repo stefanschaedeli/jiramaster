@@ -10,7 +10,7 @@ function copyToClipboard(elementId) {
 
   if (navigator.clipboard && window.isSecureContext) {
     navigator.clipboard.writeText(el.value).then(() => {
-      showCopyFeedback(elementId);
+      showCopyFeedback(elementId, true);
     }).catch(() => {
       fallbackCopy(el);
     });
@@ -23,25 +23,38 @@ function fallbackCopy(el) {
   el.select();
   el.setSelectionRange(0, 99999);
   try {
-    document.execCommand('copy');
-    showCopyFeedback(el.id);
+    const ok = document.execCommand('copy');
+    showCopyFeedback(el.id, ok);
   } catch (e) {
-    console.warn('Copy failed', e);
+    showCopyFeedback(el.id, false);
   }
 }
 
-function showCopyFeedback(elementId) {
+function showCopyFeedback(elementId, success) {
   const btn = document.querySelector(`button[onclick="copyToClipboard('${elementId}')"]`);
   if (!btn) return;
   const original = btn.textContent;
-  btn.textContent = 'Copied!';
-  btn.classList.add('btn-success');
-  btn.classList.remove('btn-outline-secondary');
-  setTimeout(() => {
-    btn.textContent = original;
-    btn.classList.remove('btn-success');
-    btn.classList.add('btn-outline-secondary');
-  }, 2000);
+  const originalClass = btn.classList.contains('btn-outline-secondary') ? 'btn-outline-secondary' : 'btn-outline-primary';
+
+  if (success) {
+    btn.textContent = 'Copied!';
+    btn.classList.add('btn-success');
+    btn.classList.remove(originalClass);
+    setTimeout(() => {
+      btn.textContent = original;
+      btn.classList.remove('btn-success');
+      btn.classList.add(originalClass);
+    }, 2000);
+  } else {
+    btn.textContent = 'Copy failed — use Ctrl+C';
+    btn.classList.add('btn-danger');
+    btn.classList.remove(originalClass);
+    setTimeout(() => {
+      btn.textContent = original;
+      btn.classList.remove('btn-danger');
+      btn.classList.add(originalClass);
+    }, 3000);
+  }
 }
 
 // ── Import view: toggle story list visibility ────────────────────────────────
