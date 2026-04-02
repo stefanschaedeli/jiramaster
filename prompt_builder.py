@@ -19,7 +19,7 @@ AGGRESSIVENESS_MAP = {
         "parking-lot items, and tasks someone can do in a day."
     ),
     3: (
-        "Create epics for every identifiable stream of work, including tentative items. "
+        "Create epics for every work stream mentioned, including tentative or exploratory ones. "
         "Still require that each epic has enough substance for multiple stories — "
         "don't create single-story epics."
     ),

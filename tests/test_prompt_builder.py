@@ -32,7 +32,7 @@ def test_tuning_aggressiveness_2():
 
 def test_tuning_aggressiveness_3():
     result = build_tuning_instructions({"aggressiveness": 3})
-    assert "every identifiable stream of work" in result
+    assert "every work stream mentioned" in result
     assert "single-story epics" in result
 
 
