@@ -8,7 +8,7 @@ JiraMaster is a Flask web application that bridges the gap between your AI assis
 ![Flask](https://img.shields.io/badge/Flask-3.x-lightgrey)
 ![Jira Cloud](https://img.shields.io/badge/Jira-Cloud%20REST%20v3-0052CC)
 ![License](https://img.shields.io/badge/License-GPLv3-green)
-![Version](https://img.shields.io/badge/version-1.8.0-orange)
+![Version](https://img.shields.io/badge/version-3.3.1-orange)
 
 ---
 
@@ -27,6 +27,7 @@ JiraMaster is a Flask web application that bridges the gap between your AI assis
   - [Step 4: Upload to Jira](#step-4-upload-to-jira)
 - [Jira Tools](#jira-tools)
 - [Cache Manager](#cache-manager)
+- [Updating JiraMaster](#updating-jiramaster)
 - [Advanced Topics](#advanced-topics)
 - [Project Structure](#project-structure)
 - [Troubleshooting](#troubleshooting)
@@ -38,11 +39,12 @@ JiraMaster is a Flask web application that bridges the gap between your AI assis
 
 JiraMaster solves a common pain point: after a meeting, you have Copilot or ChatGPT produce a structured YAML summary of decisions and action items, but getting that into Jira as properly-linked Epics and Stories is tedious. JiraMaster automates the last mile:
 
-1. **Generate** a tunable prompt tailored to your meeting notes
+1. **Generate** a tunable prompt tailored to your meeting notes and Copilot mode
 2. **Import** the YAML/JSON output your LLM produces
 3. **Edit** every field — titles, acceptance criteria, assignees, labels, priorities, due dates
-4. **Upload** directly to Jira Cloud via REST API v3
-5. **Browse** a landing page that surfaces all modules with quick-access links
+4. **Upload** directly to Jira Cloud via REST API v3 with real-time progress tracking
+
+Every uploaded batch is automatically tagged with a unique run label (`JiraMaster-XYZ-000001`) so you can find and audit issues created in any session.
 
 No database. No migrations. Works out of the box with `./scripts/start.sh`.
 
@@ -57,7 +59,7 @@ No database. No migrations. Works out of the box with `./scripts/start.sh`.
 | **Client** | Browser — interacts with the Flask web UI |
 | **Application** | Flask 3.x app (`app.py`) with 8 route blueprints: `/` (home), `/prompt`, `/import`, `/edit`, `/upload`, `/settings`, `/tools`, `/cache` |
 | **Core Modules** | `parser.py`, `prompt_builder.py`, `jira_client.py`, `config.py`, `models.py`, `work_store.py`, `logging_config.py` |
-| **File Storage** | `.work/{uuid}.json` per session; `cache/` directory for assignees, labels, projects; `config.json` — no database |
+| **File Storage** | `.work/{uuid}.json` per session; `cache/` directory for assignees, labels, projects, initiatives; `config.json` — no database |
 | **External** | Jira Cloud (REST API v3), Atlassian Teams API, OS Keyring (macOS Keychain / Windows Credential Manager), and your LLM of choice |
 | **Launch Scripts** | `scripts/start.sh` (macOS/Linux) and `scripts/start.ps1` + `scripts/start.bat` (Windows) — manage venv, deps, TLS cert merging |
 
@@ -70,6 +72,7 @@ No database. No migrations. Works out of the box with `./scripts/start.sh`.
 - **Centralised logging** — all modules use `logging.getLogger(__name__)`; a single `setup_logging()` call in `app.py` routes everything to a rotating file log and console.
 - **Secure credential storage** — API tokens can be stored in the OS keyring (macOS Keychain, Windows Credential Manager) instead of plaintext `config.json`.
 - **Security hardening** — all responses carry CSP, X-Frame-Options, and X-Content-Type-Options headers; session cookies are HttpOnly, SameSite=Lax, 8-hour lifetime; work-file access is validated against a session fingerprint.
+- **Run label tracking** — every upload run auto-generates a `JiraMaster-BBB-XXXXXX` label (where BBB = user initials, XXXXXX = incrementing counter) applied to all created issues, making it easy to find and audit batches.
 
 ---
 
@@ -82,7 +85,7 @@ Meeting Notes (optional)
         │
         ▼
 ┌───────────────────┐
-│  Step 1: Prompt   │  ← Tune aggressiveness, story count, detail level
+│  Step 1: Prompt   │  ← Choose Copilot Mode, tune aggressiveness & detail
 │  /prompt          │  → Download .txt or copy to clipboard
 └────────┬──────────┘
          │ (manual: paste into Copilot / ChatGPT)
@@ -92,7 +95,7 @@ Meeting Notes (optional)
          ▼
 ┌───────────────────┐
 │  Step 2: Import   │  ← Paste YAML/JSON or upload file
-│  /import          │  → Select epics, set initiative IDs
+│  /import          │  → Select epics, set initiative IDs & project keys
 └────────┬──────────┘
          │ saved to .work/{uuid}.json
          ▼
@@ -103,12 +106,13 @@ Meeting Notes (optional)
          │
          ▼
 ┌───────────────────┐
-│  Step 4: Upload   │  ← Preview counts, then push
+│  Step 4: Upload   │  ← Preview counts, then push with live SSE progress
 │  /upload          │  → Jira Cloud REST API v3
 └───────────────────┘
          │
          ▼
   Jira Epics & Stories created
+  (auto-tagged with run label JiraMaster-BBB-XXXXXX)
 ```
 
 ---
@@ -233,14 +237,15 @@ Navigate to **Meeting to Jira** in the top nav (or **http://127.0.0.1:5000/promp
 
 | Control | Options | Effect |
 |---------|---------|--------|
-| **Aggressiveness** | Conservative / Standard / Aggressive | How many action items to extract. Conservative = explicit decisions only; Aggressive = all action items including tentative ones. |
+| **Copilot Mode** | Post-Recap / In-Meeting | Post-Recap: paste the full meeting recap after it ends. In-Meeting: use Copilot during the meeting for a live prompt. |
+| **Aggressiveness** | Conservative / Standard / Aggressive | Filters how strictly Jira-worthy items must be. Conservative = only committed, multi-story work; Standard = clear action items; Aggressive = all discussion points and tentative tasks. |
 | **Stories per Epic** | Min / Max (numbers) | Tells the LLM how many stories to generate per epic. |
 | **Story Detail Level** | Brief / Standard / Detailed | Brief = title + description only; Standard = all fields; Detailed = rich acceptance criteria with examples. |
 | **Include Sub-tasks** | Checkbox | Adds 2–4 sub-task title suggestions per story. |
 
 **Steps:**
-1. Paste your meeting notes into the **Meeting Notes** textarea (or leave blank for a sample prompt)
-2. Adjust the controls
+1. Paste your meeting notes into the **Meeting Notes** textarea (or leave blank)
+2. Select your **Copilot Mode** and adjust the controls
 3. Click **Generate Prompt** — the right panel updates with the tailored prompt
 4. Click **Copy** to copy to clipboard, or **Download .txt** to save
 5. Paste the prompt into GitHub Copilot, ChatGPT, or any LLM
@@ -284,8 +289,8 @@ Click **Parse →** to import.
 After parsing, you see a list of epics with checkboxes. Here you can:
 
 - **Check/uncheck** epics and stories to include or exclude them from upload
-- Set an **Initiative ID** (the Jira key of a parent epic, e.g. `PROJ-42`) to link epics
-- Override the **Project Key** per epic if you're targeting multiple projects
+- Set an **Initiative ID** (the Jira key of a parent epic, e.g. `PROJ-42`) to link epics — uses a searchable dropdown populated from the cached initiatives list
+- Override the **Project Key** per epic if you're targeting multiple projects — uses a searchable dropdown populated from the cached projects list
 
 Click **Confirm & Edit →** to proceed.
 
@@ -323,7 +328,7 @@ Click **Save & Continue →** when done.
 
 Review the summary before pushing: epic count, story count, total issues, and target project. Each epic is listed with its included stories, priorities, due dates, and initiative links.
 
-Click **Upload to Jira** when ready.
+Click **Upload to Jira** when ready. A full-screen overlay with a live API log and progress bar appears while the upload runs — you can abort at any time.
 
 #### 4b — Results
 
@@ -333,9 +338,10 @@ After upload, each issue is shown with:
 
 For each epic/story, JiraMaster:
 1. Creates the Jira issue (Epic or Story with parent link)
-2. Transitions it to the requested status (if set)
-3. Posts acceptance criteria as a comment (ADF format, with plain-text fallback)
-4. Posts the optional extra comment
+2. Applies the auto-generated run label (`JiraMaster-BBB-XXXXXX`) alongside any manually set labels
+3. Transitions it to the requested status (if set)
+4. Posts acceptance criteria as a comment (ADF format, with plain-text fallback)
+5. Posts the optional extra comment
 
 ---
 
@@ -347,7 +353,7 @@ Navigate to **Jira Tools** in the top nav.
 
 ### Refresh Assignees
 
-Fetches assignable users from Jira and caches them to `assignees.json` for use in the Edit step.
+Fetches assignable users from Jira and caches them to `cache/assignees.json` for use in the Edit step.
 
 **Fetch Scope** — use **Load Projects** to pick a project other than your configured default.
 
@@ -364,9 +370,17 @@ Filters are combined with AND logic. If all filters together return 0 users, the
 
 ### Refresh Labels
 
-Fetches the top 40 most-used labels from Jira and caches them to `labels.json`.
+Fetches labels from Jira and caches them to `cache/labels.json`. You can scope the fetch to a specific project and filter by prefix, or add labels manually.
 
-Run **Refresh Assignees** and **Refresh Labels** once after setup, and again whenever your team membership or label set changes.
+### Refresh Initiatives
+
+Fetches parent epics (initiatives) from Jira and caches them to `cache/initiatives.json` for use as searchable dropdowns on the Import page.
+
+**Filter Options:**
+- **Projects** — multi-select; fetch initiatives from specific projects only
+- **Statuses** — multi-select; e.g. fetch only `In Progress` initiatives
+
+Run **Refresh Assignees**, **Refresh Labels**, and **Refresh Initiatives** once after setup, and again whenever your team or project data changes.
 
 ---
 
@@ -381,15 +395,48 @@ The Cache Manager shows the current state of all locally cached Jira data:
 | Cache | Contents | Source |
 |-------|----------|--------|
 | **Assignees** | Jira assignable users (display name, email, account ID) | Jira Tools → Refresh Assignees |
-| **Labels** | Top 40 most-used project labels | Jira Tools → Refresh Labels |
+| **Labels** | Cached project labels with usage counts | Jira Tools → Refresh Labels |
 | **Projects** | Accessible Jira project list | Jira Tools → Load Projects |
+| **Initiatives** | Parent epics for linking | Jira Tools → Refresh Initiatives |
 
 For each cache you can:
 - View item count and last-fetched timestamp
 - **Delete** individual entries
 - **Clear all** entries in a cache
 
-Caches are stored in the `cache/` directory as JSON files with metadata headers.
+Caches are stored in the `cache/` directory as JSON files.
+
+---
+
+## Updating JiraMaster
+
+JiraMaster can update itself with one click. In **Settings**, scroll to the **Update & Restart** card and click the **Update & Restart** button.
+
+![Settings Update](docs/images/06_settings.png)
+
+What happens:
+1. JiraMaster shuts down the Flask server
+2. Pulls the latest code from GitHub (`git reset --hard origin/main`)
+3. Re-installs any new dependencies
+4. Restarts the server
+
+Your `config.json`, `cache/`, `.work/`, and `logs/` are preserved — the update only affects application code.
+
+The page shows a full-screen overlay while the update runs and **reloads automatically** when the server is back up (polls every 2 seconds for up to 90 seconds).
+
+You can also update from the command line:
+
+**macOS / Linux:**
+```bash
+./scripts/update.sh
+```
+
+**Windows:**
+```bat
+scripts\update.bat
+```
+
+Both scripts wait for port 5000 to be free, pull the latest code, and re-launch the app.
 
 ---
 
@@ -402,7 +449,7 @@ FLASK_DEBUG=1 ./scripts/start.sh
 ```
 
 Enables:
-- Flask debug toolbar and auto-reload
+- Flask auto-reload on code changes
 - `DEBUG`-level console logging (normally only `INFO`)
 
 Windows:
@@ -429,6 +476,22 @@ JiraMaster uses the OS keyring to store your Jira API token when available:
 - **Linux** — stored via `keyring` (requires a keyring backend such as `SecretService`)
 
 If no keyring backend is available, the token falls back to plaintext in `config.json`. The Settings page shows which mode is active in the **Security Status** panel.
+
+### Run Label Tracking
+
+Every upload run automatically applies a label to all created issues in the format:
+
+```
+JiraMaster-BBB-XXXXXX
+```
+
+Where:
+- **BBB** = initials derived from your Jira username (first 2 letters of first name + first letter of last name, e.g. `ALJ` for Alice Johnson)
+- **XXXXXX** = zero-padded incrementing counter per run (e.g. `000001`, `000002`)
+
+This makes it trivial to search Jira for all issues created in a specific JiraMaster session: `label = "JiraMaster-ALJ-000003"`.
+
+The counter is persisted in `cache/run_counter.json` and survives restarts.
 
 ### Acceptance Criteria Field
 
@@ -461,47 +524,46 @@ JiraMaster/
 ├── models.py               # Dataclasses: Epic, Story, JiraConfig, UploadResult, Priority
 ├── jira_client.py          # All Jira REST API v3 calls (create, transition, comment, groups, roles)
 ├── parser.py               # Parse YAML/JSON LLM output → Epic/Story objects
-├── prompt_builder.py       # Build tunable prompts (aggressiveness, detail, story count)
+├── prompt_builder.py       # Build tunable prompts (aggressiveness, detail, story count, copilot mode)
 ├── logging_config.py       # Centralised logging (rotating file + console)
 ├── work_store.py           # Centralised session work-file access with fingerprint validation
+├── run_counter.py          # Persistent run counter for JiraMaster-BBB-XXXXXX label generation
 ├── assignees.py            # Assignee cache helpers (reads/writes cache/assignees.json)
 ├── labels.py               # Label cache helpers (reads/writes cache/labels.json)
+├── operation_events.py     # SSE queue/stream infrastructure for long-running operations
 │
 ├── routes/
 │   ├── prompt.py           # /prompt — generate & download prompt
 │   ├── import_view.py      # /import — paste/upload and parse LLM output
 │   ├── edit.py             # /edit — edit all epic/story fields
-│   ├── upload.py           # /upload — preview and push to Jira
+│   ├── upload.py           # /upload — preview and SSE-powered push to Jira
 │   ├── settings.py         # /settings — Jira credentials, field config, security status
-│   ├── tools.py            # /tools — refresh assignees/labels, fetch projects/roles/groups
+│   ├── tools.py            # /tools — refresh assignees/labels/initiatives, update & restart
 │   └── cache_manager.py    # /cache — view and manage local caches
 │
 ├── templates/              # Jinja2 templates (one subdirectory per blueprint)
-│                           #   home/, prompt/, import/, edit/, upload/, settings/, tools/, cache_manager/
 ├── static/
 │   ├── style.css           # Bootstrap 5.3 overrides
-│   └── app.js              # Clipboard copy, story toggles, cascade checkbox logic
+│   ├── app.js              # Clipboard copy, story toggles, cascade checkbox logic
+│   └── overlay.js          # SSE overlay: progress bar, API log, abort button
 │
 ├── scripts/
 │   ├── start.sh            # Launch script: macOS/Linux
 │   ├── start.ps1           # Launch script: Windows
 │   ├── start.bat           # Windows batch wrapper
-│   ├── update.ps1          # Windows updater (git pull + restart)
-│   └── update.bat          # Windows update batch wrapper
+│   ├── update.sh           # Update script: macOS/Linux (git pull + restart)
+│   ├── update.ps1          # Update script: Windows
+│   └── update.bat          # Windows batch wrapper
 │
 ├── data/
 │   └── prompt_template.txt # Default LLM prompt template
 │
 ├── docs/
-│   └── images/             # Architecture diagrams and app screenshots
+│   ├── images/             # Architecture diagrams and app screenshots
+│   ├── generate_diagrams.py  # Regenerate architecture/dataflow PNGs
+│   └── take_screenshots.py   # Headless Playwright screenshot tool
 │
-├── .claude/
-│   ├── hooks/              # Auto-commit and major-release confirmation hooks
-│   ├── rules/              # Enforced development rules (loaded by Claude Code)
-│   └── settings.json       # Project permissions and hook wiring
-│
-├── requirements.txt        # Python dependencies
-└── VERSION                 # Current version string
+└── tests/                  # pytest test suite (166 tests)
 ```
 
 **Runtime files (gitignored):**
@@ -513,6 +575,8 @@ JiraMaster/
 | `cache/assignees.json` | Cached Jira assignable users |
 | `cache/labels.json` | Cached Jira labels |
 | `cache/projects.json` | Cached Jira project list |
+| `cache/initiatives.json` | Cached Jira initiatives |
+| `cache/run_counter.json` | Persistent upload run counter |
 | `.work/{uuid}.json` | In-progress session work files |
 | `logs/jiramaster.log` | Rotating application log |
 | `logs/startup.log` | Startup diagnostics |
@@ -547,10 +611,13 @@ Your Jira account may not have permission to list groups or roles. Check with yo
 - Try **Detail Level: Standard** in Step 1 if the LLM keeps adding extra fields
 
 ### Cache Manager shows empty caches
-Go to **Jira Tools** and run **Refresh Assignees** and **Refresh Labels** first. The Cache Manager only shows data that has been fetched at least once.
+Go to **Jira Tools** and run the relevant Refresh operations first. The Cache Manager only shows data that has been fetched at least once.
 
 ### Keyring not available
 On Linux, `keyring` requires a backend (e.g. `gnome-keyring`, `kwallet`, or `pass`). If none is installed, credentials fall back to `config.json` automatically — no action needed. The Settings page shows current credential storage mode.
+
+### Update & Restart doesn't come back
+If the page doesn't reload after ~90 seconds, the app may have failed to start. Check `logs/startup.log` for errors, then run `./scripts/start.sh` manually.
 
 ---
 
