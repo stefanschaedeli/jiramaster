@@ -74,168 +74,274 @@ def centered_text(draw, cx, cy, text, font, color=TEXT_W):
 
 # ══════════════════════════════════════════════════════════════════════════════
 # DIAGRAM 1 — System Architecture
+# Layered swim-lane layout — arrows only travel straight down within each
+# column so lines never cross.
+#
+# Layout (left → right columns, top → bottom rows):
+#
+#  Col 0 (Browser)   Col 1-8 (Flask + routes)          Col 9 (LLM — out-of-band)
+#  ─────────────────────────────────────────────────────────────────────────────
+#  [Browser]         [Flask App container]               [LLM / Copilot]
+#       ↕ HTTP            ↓ (each route to module below)      ↑ copy/paste
+#                    [Core Modules row]
+#                    work_store  parser  prompt  models  jira_client  config  logging
+#                         ↓        ↓                         ↓           ↓
+#                    [.work/]  [cache/]                [Jira Cloud] [OS Keyring]
+#                    [logs/]
+#                    [config.json]
+#
+#  Bottom: [Launch Scripts] spanning full width, upward arrow to Flask
 # ══════════════════════════════════════════════════════════════════════════════
 def diagram_architecture():
-    W, H = 1400, 860
+    W, H = 1400, 900
     img = Image.new("RGB", (W, H), BG)
     draw = ImageDraw.Draw(img)
 
-    f_title = load_font(26)
-    f_head  = load_font(18)
-    f_body  = load_font(14)
+    f_title = load_font(24)
+    f_head  = load_font(16)
+    f_body  = load_font(13)
     f_sm    = load_font(12)
     f_xs    = load_font(11)
 
-    # ── Title ─────────────────────────────────────────────────────────────────
-    centered_text(draw, W // 2, 36, "JiraMaster v1.8 — System Architecture", f_title, TEXT_D)
+    # ── Helpers ───────────────────────────────────────────────────────────────
+    def section_label(cx, y, label):
+        w, _ = text_size(draw, label, f_xs)
+        draw.text((cx - w // 2, y), label, font=f_xs, fill=(110, 110, 110))
 
-    # ── Section label helper ──────────────────────────────────────────────────
-    def section_label(x, y, label):
-        w, h = text_size(draw, label, f_xs)
-        draw.text((x - w // 2, y), label, font=f_xs, fill=(120, 120, 120))
-
-    # ── Box helper ────────────────────────────────────────────────────────────
-    def box(x, y, w, h, title, subtitle=None, color=BOX_BLUE, text_color=TEXT_W, radius=10):
-        draw_rounded_rect(draw, [x, y, x + w, y + h], radius=radius, fill=color, outline=None)
+    def box(x, y, w, h, title, subtitle=None, color=BOX_BLUE,
+            text_color=TEXT_W, radius=10):
+        draw_rounded_rect(draw, [x, y, x + w, y + h],
+                          radius=radius, fill=color, outline=None)
         if subtitle:
-            centered_text(draw, x + w // 2, y + h // 2 - 10, title, f_body, text_color)
-            centered_text(draw, x + w // 2, y + h // 2 + 10, subtitle, f_xs, text_color)
+            centered_text(draw, x + w // 2, y + h // 2 - 9, title,  f_body, text_color)
+            centered_text(draw, x + w // 2, y + h // 2 + 9, subtitle, f_xs, text_color)
         else:
             centered_text(draw, x + w // 2, y + h // 2, title, f_body, text_color)
 
-    # ── Browser (User) ────────────────────────────────────────────────────────
-    bx, by, bw, bh = 30, 108, 155, 70
-    box(bx, by, bw, bh, "Browser", "(User)", color=(69, 90, 100))
-    section_label(bx + bw // 2, by - 22, "CLIENT")
+    def v_arrow(cx, y0, y1, color=ARROW, width=2, head=8):
+        """Straight vertical arrow from (cx, y0) down to (cx, y1)."""
+        draw_arrow(draw, (cx, y0), (cx, y1), color=color, width=width, head=head)
 
-    # ── Flask App container ───────────────────────────────────────────────────
-    fx, fy, fw, fh = 210, 80, 880, 130
-    draw_rounded_rect(draw, [fx, fy, fx + fw, fy + fh], radius=14,
+    # ─────────────────────────────────────────────────────────────────────────
+    # ROW 0  — Title
+    # ─────────────────────────────────────────────────────────────────────────
+    centered_text(draw, W // 2, 30, "JiraMaster v3 — System Architecture", f_title, TEXT_D)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # ROW 1  — CLIENT (left) + Flask Application (centre) + LLM (right)
+    #          y = 60 … 200
+    # ─────────────────────────────────────────────────────────────────────────
+    ROW1_Y = 62
+
+    # Browser
+    BW, BH = 130, 66
+    BX = 30
+    BY = ROW1_Y + 22
+    box(BX, BY, BW, BH, "Browser", "(User)", color=(69, 90, 100))
+    section_label(BX + BW // 2, ROW1_Y, "CLIENT")
+
+    # Flask container
+    FX, FY, FW, FH = 185, ROW1_Y, 960, 138
+    draw_rounded_rect(draw, [FX, FY, FX + FW, FY + FH], radius=14,
                       fill=(236, 242, 255), outline=(30, 136, 229), width=2)
-    centered_text(draw, fx + fw // 2, fy + 20, "Flask Application  (app.py)", f_head, BOX_BLUE)
-    section_label(fx + fw // 2, fy - 22, "APPLICATION LAYER")
+    centered_text(draw, FX + FW // 2, FY + 18, "Flask Application  (app.py)", f_head, BOX_BLUE)
+    section_label(FX + FW // 2, FY - 18, "APPLICATION LAYER")
 
-    # Route boxes inside Flask — 8 routes, 88px wide each
-    routes = [
-        ("/ home",    220, 112),
-        ("/prompt",   316, 112),
-        ("/import",   412, 112),
-        ("/edit",     508, 112),
-        ("/upload",   604, 112),
-        ("/settings", 700, 112),
-        ("/tools",    796, 112),
-        ("/cache",    892, 112),
-    ]
-    for label, rx, ry in routes:
-        box(rx, ry, 88, 44, label, color=BOX_BLUE, radius=7)
+    # 8 route chips inside Flask  — fit evenly
+    route_labels = ["/ home", "/prompt", "/import", "/edit",
+                    "/upload", "/settings", "/tools", "/cache"]
+    RW, RH = 108, 42
+    r_gap = (FW - len(route_labels) * RW) // (len(route_labels) + 1)
+    route_xs = [FX + r_gap + i * (RW + r_gap) for i in range(len(route_labels))]
+    route_y = FY + 36
+    for label, rx in zip(route_labels, route_xs):
+        box(rx, route_y, RW, RH, label, color=BOX_BLUE, radius=6)
 
-    # Security annotation below routes
+    # Security footer inside Flask
     sec_text = "CSRF · Security Headers · Session Fingerprinting · HttpOnly Cookies"
     sw, _ = text_size(draw, sec_text, f_xs)
-    draw.text((fx + fw // 2 - sw // 2, fy + fh - 18), sec_text, font=f_xs, fill=(60, 100, 180))
+    draw.text((FX + FW // 2 - sw // 2, FY + FH - 16),
+              sec_text, font=f_xs, fill=(60, 100, 180))
 
-    # ── Core Modules ──────────────────────────────────────────────────────────
-    modules_y = 278
+    # Browser ↔ Flask  (horizontal bidirectional)
+    mid_y = BY + BH // 2
+    draw_arrow(draw, (BX + BW, mid_y - 5),  (FX, mid_y - 5),  width=2, head=9)
+    draw_arrow(draw, (FX, mid_y + 9), (BX + BW, mid_y + 9), width=2, head=9)
+
+    # LLM  (out-of-band, top-right)
+    LLM_W, LLM_H = 175, 60
+    LLM_X = W - LLM_W - 18
+    LLM_Y = BY + (BH - LLM_H) // 2
+    box(LLM_X, LLM_Y, LLM_W, LLM_H, "LLM", "(Copilot / ChatGPT)", color=BOX_ORG)
+    section_label(LLM_X + LLM_W // 2, ROW1_Y, "OUT-OF-BAND")
+    # Dashed horizontal line: Flask right edge → LLM left edge
+    fx_right = FX + FW
+    llm_mid_y = LLM_Y + LLM_H // 2
+    dash_len, gap_len = 10, 6
+    cx = fx_right + 4
+    while cx + dash_len < LLM_X - 4:
+        draw.line([(cx, llm_mid_y), (cx + dash_len, llm_mid_y)],
+                  fill=(170, 170, 170), width=2)
+        cx += dash_len + gap_len
+    note_x = fx_right + 8
+    draw.text((note_x, llm_mid_y - 16), "copy prompt /", font=f_xs, fill=(160, 160, 160))
+    draw.text((note_x, llm_mid_y + 2),  "paste output",  font=f_xs, fill=(160, 160, 160))
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # ROW 2  — Core Modules
+    #          7 modules arranged so each sits in a named column.
+    #          Columns are spaced to align with their downstream targets.
+    #
+    #  col index:  0          1         2         3          4            5         6
+    #  module:   work_store  parser  prompt   models   jira_client   config   logging
+    #  connects:  .work/     cache/   (none)   (none)   Jira Cloud  OS Keyring  logs/
+    # ─────────────────────────────────────────────────────────────────────────
+    ROW2_Y = 248
+    MW, MH = 170, 66
+    M_GAP = 22
+    N_MOD = 7
+    # centre the module row inside the Flask column range
+    total_mod_w = N_MOD * MW + (N_MOD - 1) * M_GAP
+    MX_START = FX + (FW - total_mod_w) // 2
+
     modules = [
-        ("parser.py",         "YAML/JSON → Epics",  BOX_GRAY),
-        ("prompt_builder.py", "Prompt Generation",  BOX_GRAY),
-        ("jira_client.py",    "Jira REST API v3",   BOX_BLUE),
-        ("config.py",         "Config + Keyring",   BOX_GRAY),
-        ("models.py",         "Dataclasses",        BOX_GRAY),
-        ("work_store.py",     "Session Store",      BOX_GRAY),
-        ("logging_config.py", "Centralised Logs",   BOX_GRAY),
+        ("work_store.py",    "Session Store",   BOX_GRAY),  # → .work/  logs/
+        ("parser.py",        "YAML → Epics",    BOX_GRAY),  # → cache/assignees
+        ("prompt_builder.py","Prompt Gen",      BOX_GRAY),  # (no storage)
+        ("models.py",        "Dataclasses",     BOX_GRAY),  # (no storage)
+        ("jira_client.py",   "Jira REST v3",    BOX_BLUE),  # → Jira Cloud
+        ("config.py",        "Config+Keyring",  BOX_GRAY),  # → config.json / OS Keyring
+        ("logging_config.py","Centralised Logs",BOX_GRAY),  # (log files via work_store)
     ]
-    mw, mh = 178, 68
-    gap = 18
-    mx_start = 30
+    mod_centers = []
     for i, (name, desc, color) in enumerate(modules):
-        mx = mx_start + i * (mw + gap)
-        box(mx, modules_y, mw, mh, name, desc, color=color)
-    section_label(W // 2, modules_y - 22, "CORE MODULES")
+        mx = MX_START + i * (MW + M_GAP)
+        box(mx, ROW2_Y, MW, MH, name, desc, color=color)
+        mod_centers.append(mx + MW // 2)
 
-    # Connectors: Flask → modules
-    for i in range(len(modules)):
-        mx = mx_start + i * (mw + gap) + mw // 2
-        draw_arrow(draw, (fx + fw // 2, fy + fh), (mx, modules_y), width=1, head=7)
+    section_label(FX + FW // 2, ROW2_Y - 20, "CORE MODULES")
 
-    # ── File Storage ──────────────────────────────────────────────────────────
-    store_y = 420
+    # Flask → each module  (straight vertical — each route chip roughly above
+    # the module strip; use the module centre x, from Flask bottom)
+    flask_bottom = FY + FH
+    for cx in mod_centers:
+        v_arrow(cx, flask_bottom, ROW2_Y, width=1, head=6)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # ROW 3  — Split into two groups separated by a gap
+    #
+    #  LEFT  (under modules 0-3):  File Storage  (4 boxes)
+    #  RIGHT (under modules 4-5):  External Services  (3 boxes, stacked)
+    # ─────────────────────────────────────────────────────────────────────────
+    ROW3_Y = 382
+
+    # ── File Storage (left group, under work_store / parser / prompt / models)
+    LEFT_COL_END = MX_START + 3 * (MW + M_GAP) + MW  # right edge of models.py
+
     stores = [
         (".work/{uuid}.json", "Session Work Files"),
+        ("cache/",            "Assignee / Label / Project"),
         ("config.json",       "Jira Credentials"),
-        ("cache/assignees",   "Assignee Cache"),
-        ("cache/labels",      "Label Cache"),
-        ("cache/projects",    "Project Cache"),
         ("logs/",             "App + Startup Logs"),
     ]
-    sw2, sh = 185, 62
-    sg = 20
-    sx_start = 30
-    for i, (name, desc) in enumerate(stores):
-        sx = sx_start + i * (sw2 + sg)
-        box(sx, store_y, sw2, sh, name, desc, color=BOX_TEAL, radius=8)
-    section_label(W // 2, store_y - 22, "FILE STORAGE  (no database)")
+    n_stores = len(stores)
+    LEFT_STORE_W = LEFT_COL_END - MX_START
+    SW = (LEFT_STORE_W - (n_stores - 1) * 14) // n_stores
+    SH = 60
+    s_gap = 14
+    store_xs = [MX_START + i * (SW + s_gap) for i in range(n_stores)]
+    store_centers = [sx + SW // 2 for sx in store_xs]
 
-    # Connectors: core modules → storage
-    draw_arrow(draw, (mx_start + 2 * (mw + gap) + mw // 2, modules_y + mh),
-               (sx_start + sw2 // 2, store_y), width=1, head=7)
-    draw_arrow(draw, (mx_start + 3 * (mw + gap) + mw // 2, modules_y + mh),
-               (sx_start + sw2 + sg + sw2 // 2, store_y), width=1, head=7)
-    draw_arrow(draw, (mx_start + 5 * (mw + gap) + mw // 2, modules_y + mh),
-               (sx_start + sw2 // 2, store_y), width=1, head=7)
+    for sx, (name, desc) in zip(store_xs, stores):
+        box(sx, ROW3_Y, SW, SH, name, desc, color=BOX_TEAL, radius=8)
+    section_label(MX_START + LEFT_STORE_W // 2, ROW3_Y - 20,
+                  "FILE STORAGE  (no database)")
 
-    # ── External Services ─────────────────────────────────────────────────────
-    ext_y = 278
-    externals = [
-        ("Jira Cloud",       "REST API v3"),
-        ("Atlassian Teams",  "Teams API"),
-        ("OS Keyring",       "macOS / Windows"),
-    ]
-    ex, ey_start = 1150, ext_y
-    ew, eh = 200, 68
-    eg = 18
-    for i, (name, desc) in enumerate(externals):
-        ey = ey_start + i * (eh + eg)
-        box(ex, ey, ew, eh, name, desc, color=BOX_ORG)
-    section_label(ex + ew // 2, ext_y - 22, "EXTERNAL")
+    # Module → storage arrows (straight vertical)
+    # work_store.py → .work/
+    v_arrow(store_centers[0], ROW2_Y + MH, ROW3_Y, width=1, head=7)
+    # parser.py → cache/
+    v_arrow(store_centers[1], ROW2_Y + MH, ROW3_Y, width=1, head=7)
+    # config.py → config.json
+    v_arrow(store_centers[2], ROW2_Y + MH, ROW3_Y, width=1, head=7)
+    # logging_config.py → logs/
+    v_arrow(store_centers[3], ROW2_Y + MH, ROW3_Y, width=1, head=7)
 
-    # Connector: jira_client → Jira Cloud
-    jira_mx = mx_start + 2 * (mw + gap) + mw
-    draw_arrow(draw, (jira_mx, modules_y + mh // 2), (ex, ext_y + eh // 2), width=2, head=10)
-    # Connector: config.py → OS Keyring
-    cfg_mx = mx_start + 3 * (mw + gap) + mw
-    draw_arrow(draw, (cfg_mx, modules_y + mh // 2), (ex, ext_y + 2 * (eh + eg) + eh // 2), width=1, head=7)
+    # ── External Services — each in its own column under the module that uses it
+    # jira_client.py (mod 4) → Jira Cloud + Atlassian Teams (side by side)
+    # config.py      (mod 5) → OS Keyring
+    EH, E_GAP = 60, 14
 
-    # ── LLM (manual out-of-band) ──────────────────────────────────────────────
-    lx, ly, lw, lh = 1150, 108, 200, 62
-    box(lx, ly, lw, lh, "LLM", "(Copilot / ChatGPT)", color=BOX_ORG)
-    draw.line([(bx + bw, by + bh // 2), (lx, ly + lh // 2)], fill=(200, 200, 200), width=2)
-    draw.text((850, by + bh // 2 - 16), "copy prompt / paste output", font=f_xs, fill=(160, 160, 160))
+    # Jira Cloud — centred under jira_client.py
+    jc_cx = mod_centers[4]
+    EW_JC = MW + 20
+    jc_x  = jc_cx - EW_JC // 2
+    box(jc_x, ROW3_Y, EW_JC, EH, "Jira Cloud", "REST API v3", color=BOX_ORG)
+    v_arrow(jc_cx, ROW2_Y + MH, ROW3_Y, width=2, head=10)
 
-    # Browser ↔ Flask
-    draw_arrow(draw, (bx + bw, by + bh // 2), (fx, fy + fh // 2), width=2, head=10)
-    draw_arrow(draw, (fx, fy + fh // 2 + 14), (bx + bw, by + bh // 2 + 14), width=2, head=10)
+    # Atlassian Teams — to the right of Jira Cloud, connected by a thin arrow
+    # from jira_client as well (offset slightly right)
+    at_x = jc_x + EW_JC + E_GAP
+    EW_AT = MW
+    box(at_x, ROW3_Y, EW_AT, EH, "Atlassian Teams", "Teams API", color=BOX_ORG)
+    at_cx = at_x + EW_AT // 2
+    v_arrow(at_cx, ROW2_Y + MH, ROW3_Y, width=1, head=7)
 
-    # ── Launch Scripts ────────────────────────────────────────────────────────
-    lsx, lsy, lsw, lsh = 260, 570, 420, 62
-    box(lsx, lsy, lsw, lsh, "start.sh / start.ps1 / start.bat",
-        "venv · deps · CA cert merge · launch", color=(78, 52, 46), radius=8)
-    section_label(lsx + lsw // 2, lsy - 22, "LAUNCH SCRIPTS")
-    draw_arrow(draw, (lsx + lsw // 2, lsy), (fx + fw // 2, fy + fh), width=1, head=8)
+    # OS Keyring — centred under config.py
+    cfg_cx = mod_centers[5]
+    EW_KR = MW + 10
+    kr_x  = cfg_cx - EW_KR // 2
+    box(kr_x, ROW3_Y, EW_KR, EH, "OS Keyring", "macOS / Windows", color=BOX_ORG)
+    v_arrow(cfg_cx, ROW2_Y + MH, ROW3_Y, width=1, head=7)
 
-    # ── Legend ────────────────────────────────────────────────────────────────
+    # Section label centred over all three external boxes
+    ext_left  = jc_x
+    ext_right = kr_x + EW_KR
+    section_label((ext_left + ext_right) // 2, ROW3_Y - 20, "EXTERNAL SERVICES")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # ROW 4  — Launch Scripts (bottom banner, outside the data-flow)
+    #  Arrow routed up the LEFT edge of the Flask column to avoid crossing
+    #  the module and storage rows.
+    # ─────────────────────────────────────────────────────────────────────────
+    ROW4_Y = 610
+    LSW = FW
+    LSH = 56
+    LSX = FX
+    box(LSX, ROW4_Y, LSW, LSH,
+        "start.sh  /  start.ps1  /  start.bat",
+        "venv · pip install · CA cert merge · launch Flask",
+        color=(78, 52, 46), radius=8)
+    section_label(LSX + LSW // 2, ROW4_Y - 18, "LAUNCH SCRIPTS")
+    # Route the launch arrow up the left margin — clear of all module/storage boxes.
+    # Three segments: horizontal left → vertical up → horizontal right into Flask.
+    LS_COLOR  = (78, 52, 46)
+    MARGIN_X  = LSX - 30   # left of everything
+    ls_top_y  = ROW4_Y     # top of scripts banner
+    ls_mid_y  = ls_top_y + LSH // 2
+    # 1. Horizontal: scripts left edge → margin
+    draw.line([(LSX, ls_mid_y), (MARGIN_X, ls_mid_y)], fill=LS_COLOR, width=2)
+    # 2. Vertical: margin bottom → margin at Flask bottom
+    draw.line([(MARGIN_X, ls_mid_y), (MARGIN_X, flask_bottom)], fill=LS_COLOR, width=2)
+    # 3. Horizontal + arrowhead: margin → Flask left edge
+    draw_arrow(draw, (MARGIN_X, flask_bottom), (FX, flask_bottom),
+               color=LS_COLOR, width=2, head=9)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Legend
+    # ─────────────────────────────────────────────────────────────────────────
     legend_items = [
-        (BOX_BLUE,    "Flask / Routes / Jira Client"),
-        (BOX_GRAY,    "Core Modules"),
-        (BOX_TEAL,    "File Storage"),
-        (BOX_ORG,     "External Services"),
-        ((78, 52, 46),"Launch Scripts"),
+        (BOX_BLUE,      "Flask / Routes / Jira Client"),
+        (BOX_GRAY,      "Core Modules"),
+        (BOX_TEAL,      "File Storage"),
+        (BOX_ORG,       "External Services"),
+        ((78, 52, 46),  "Launch Scripts"),
     ]
-    lx0, ly0 = 30, 720
+    LG_X, LG_Y = 30, 820
     for i, (color, label) in enumerate(legend_items):
-        cx = lx0 + i * 260
-        draw_rounded_rect(draw, [cx, ly0, cx + 20, ly0 + 20], radius=4, fill=color)
-        draw.text((cx + 28, ly0 + 2), label, font=f_xs, fill=TEXT_D)
+        lx = LG_X + i * 250
+        draw_rounded_rect(draw, [lx, LG_Y, lx + 18, LG_Y + 18], radius=3, fill=color)
+        draw.text((lx + 26, LG_Y + 1), label, font=f_xs, fill=TEXT_D)
 
     img.save(os.path.join(OUT, "architecture.png"), "PNG", dpi=(144, 144))
     print("✓ architecture.png")
