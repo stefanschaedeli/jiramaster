@@ -6,6 +6,8 @@ from flask import Blueprint, render_template, request, flash, redirect, url_for,
 from parser import parse_copilot_output
 from config import load_config
 from work_store import load_epics, save_epics, set_session_work_id, get_session_work_id
+from projects import load_projects
+from initiatives import load_initiatives
 
 bp = Blueprint("import_view", __name__, url_prefix="/import")
 
@@ -60,7 +62,9 @@ def view():
         return redirect(url_for("import_view.index"))
     default_project_key = load_config().project_key
     return render_template("import/view.html", epics=epics, enumerate=enumerate,
-                           default_project_key=default_project_key)
+                           default_project_key=default_project_key,
+                           projects_cache=load_projects(),
+                           initiatives_cache=load_initiatives())
 
 
 @bp.route("/confirm", methods=["POST"])

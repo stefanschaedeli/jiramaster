@@ -11,6 +11,7 @@ from jira_client import JiraClient, OperationAbortedError
 from assignees import load_assignees, save_assignees
 from labels import load_label_cache, load_label_cache_rich, save_label_cache
 from projects import load_projects, save_projects
+from initiatives import load_initiatives, save_initiatives
 from operation_events import create_operation, emit_event, stream_events, abort_operation, is_aborted
 
 log = logging.getLogger(__name__)
@@ -25,6 +26,7 @@ def index():
     label_cache = load_label_cache()
     label_cache_rich = load_label_cache_rich()
     projects_cache = load_projects()
+    initiatives_cache = load_initiatives()
     selected_project = session.get("tools_last_project")
     selected_label_project = session.get("tools_last_label_project")
     return render_template(
@@ -33,6 +35,7 @@ def index():
         label_cache=label_cache,
         label_cache_rich=label_cache_rich,
         projects_cache=projects_cache,
+        initiatives_cache=initiatives_cache,
         cfg=cfg,
         selected_project=selected_project,
         selected_label_project=selected_label_project,
@@ -556,4 +559,49 @@ def _run_count_label_usage(cfg, op_id, params):
         })
     except Exception as exc:
         log.exception("_run_count_label_usage failed: %s", exc)
+        emit_event(op_id, {"type": "error", "message": str(exc)})
+
+
+@bp.route("/start-refresh-initiatives", methods=["POST"])
+def start_refresh_initiatives():
+    """Start initiative refresh in a background thread; return operation_id for SSE."""
+    cfg = load_config()
+    if not cfg.is_configured():
+        return jsonify({"error": "Jira not configured"}), 400
+
+    op_id = create_operation()
+    thread = threading.Thread(
+        target=_run_refresh_initiatives, args=(cfg, op_id), daemon=True
+    )
+    thread.start()
+    return jsonify({"operation_id": op_id})
+
+
+def _run_refresh_initiatives(cfg, op_id):
+    """Background worker for initiative refresh with event emission."""
+    try:
+        callback = lambda evt: emit_event(op_id, evt)
+        client = JiraClient(cfg, verbose=True, event_callback=callback,
+                            abort_check=lambda: is_aborted(op_id))
+
+        def emit_status(msg):
+            emit_event(op_id, {"type": "status", "message": msg})
+
+        try:
+            fetched, err = client.fetch_initiatives(emit=emit_status)
+        except OperationAbortedError:
+            emit_event(op_id, {"type": "error", "message": "Operation aborted"})
+            return
+        if err:
+            emit_event(op_id, {"type": "error", "message": f"Failed to fetch initiatives: {err}"})
+            return
+
+        save_initiatives(fetched)
+        emit_event(op_id, {
+            "type": "complete",
+            "message": "Initiative refresh complete",
+            "summary": f"Saved {len(fetched)} initiatives to cache",
+        })
+    except Exception as exc:
+        log.exception("_run_refresh_initiatives failed: %s", exc)
         emit_event(op_id, {"type": "error", "message": str(exc)})

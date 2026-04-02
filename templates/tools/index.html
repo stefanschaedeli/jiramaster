@@ -242,6 +242,27 @@
       </div>
     </div>
   </div>
+
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header fw-semibold">Initiatives Cache</div>
+      <div class="card-body d-flex flex-column">
+        <p class="card-text">Download and cache all Initiative issues you have access to. These will be available as a dropdown on the Import page.</p>
+        <div class="mb-3">
+          {% if initiatives_cache %}
+            <span class="text-success">✓</span>
+            <span class="small text-muted">{{ initiatives_cache|length }} initiatives cached</span>
+          {% else %}
+            <span class="text-muted small">No cache — click Refresh to fetch from Jira</span>
+          {% endif %}
+        </div>
+        <form method="POST" action="{{ url_for('tools.start_refresh_initiatives') }}" id="refresh-initiatives-form" class="mt-auto">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-outline-primary">Refresh Initiatives</button>
+        </form>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}
 
@@ -552,6 +573,24 @@
     });
   }
 
+  var refreshInitiativesForm = document.getElementById('refresh-initiatives-form');
+  if (refreshInitiativesForm) {
+    refreshInitiativesForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      var formData = new FormData(this);
+      startOperation(
+        '{{ url_for("tools.start_refresh_initiatives") }}',
+        formData,
+        'Refreshing initiatives from Jira\u2026',
+        {
+          csrfToken: csrfToken,
+          eventsUrl: '{{ url_for("tools.operation_events_stream", op_id="") }}',
+          abortUrl: '{{ url_for("tools.abort_operation_route", op_id="") }}',
+          onComplete: function() { location.reload(); }
+        }
+      );
+    });
+  }
 
 })();
 </script>

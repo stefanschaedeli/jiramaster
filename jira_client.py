@@ -577,6 +577,51 @@ class JiraClient:
             log.error("fetch_projects exception: %s", exc)
             return [], str(exc)
 
+    def fetch_initiatives(self, emit=None) -> Tuple[List[dict], Optional[str]]:
+        """Fetch all Initiative issues via JQL search (paginated).
+
+        Uses GET /rest/api/3/search/jql with issuetype = Initiative.
+        Returns (initiatives, error_message). initiatives is a list of
+        {key, summary, project_key} dicts.
+        """
+        try:
+            initiatives: List[dict] = []
+            start_at = 0
+            page_size = 100
+            while True:
+                if emit:
+                    emit(f"Fetching initiatives... {len(initiatives)} so far")
+                resp = self._request(
+                    "GET", self._url("search/jql"),
+                    label="fetch_initiatives",
+                    params={
+                        "jql": "issuetype = Initiative ORDER BY key ASC",
+                        "fields": "summary,project",
+                        "maxResults": page_size,
+                        "startAt": start_at,
+                    },
+                    timeout=30,
+                )
+                if resp.status_code != 200:
+                    return [], self._log_error("fetch_initiatives", resp)
+                data = resp.json()
+                page = data.get("issues", [])
+                for issue in page:
+                    initiatives.append({
+                        "key": issue["key"],
+                        "summary": issue["fields"].get("summary", ""),
+                        "project_key": issue["fields"].get("project", {}).get("key", ""),
+                    })
+                total = data.get("total", 0)
+                if not page or len(initiatives) >= total:
+                    break
+                start_at += len(page)
+            log.info("fetch_initiatives: %d initiatives found", len(initiatives))
+            return initiatives, None
+        except requests.RequestException as exc:
+            log.error("fetch_initiatives exception: %s", exc)
+            return [], str(exc)
+
     def fetch_label_names(self) -> Tuple[List[str], Optional[str]]:
         """Return all label names from the Jira instance (no usage counting).
 

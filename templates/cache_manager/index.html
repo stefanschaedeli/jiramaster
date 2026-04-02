@@ -6,9 +6,10 @@
 <p class="text-muted mb-4">View and manage locally cached data fetched from Jira.</p>
 
 {% set cache_defs = [
-  ('assignees', 'Assignees', caches.assignees, 'accountId', ['Display Name', 'Email', 'Account ID']),
-  ('labels',    'Labels',    caches.labels,    None,         ['Label', 'Usage']),
-  ('projects',  'Projects',  caches.projects,  'key',        ['Key', 'Name']),
+  ('assignees',   'Assignees',   caches.assignees,   'accountId', ['Display Name', 'Email', 'Account ID']),
+  ('labels',      'Labels',      caches.labels,      None,        ['Label', 'Usage']),
+  ('projects',    'Projects',    caches.projects,    'key',       ['Key', 'Name']),
+  ('initiatives', 'Initiatives', caches.initiatives, 'key',       ['Key', 'Summary', 'Project']),
 ] %}
 
 {% for cache_type, title, meta, id_field, columns in cache_defs %}
@@ -83,6 +84,19 @@
               <tr data-item-id="{{ item.key }}">
                 <td class="ps-3 fw-semibold">{{ item.key }}</td>
                 <td>{{ item.name }}</td>
+                <td class="text-end pe-3">
+                  <button class="btn btn-sm btn-outline-danger delete-btn"
+                          data-cache-type="{{ cache_type }}"
+                          data-item-id="{{ item.key }}">Delete</button>
+                </td>
+              </tr>
+              {% endfor %}
+            {% elif cache_type == 'initiatives' %}
+              {% for item in meta['items'] %}
+              <tr data-item-id="{{ item.key }}">
+                <td class="ps-3 fw-semibold">{{ item.key }}</td>
+                <td>{{ item.summary }}</td>
+                <td class="text-muted small">{{ item.project_key }}</td>
                 <td class="text-end pe-3">
                   <button class="btn btn-sm btn-outline-danger delete-btn"
                           data-cache-type="{{ cache_type }}"
