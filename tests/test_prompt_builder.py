@@ -115,3 +115,54 @@ def test_build_prompt_no_notes_placeholder(monkeypatch):
     result = build_prompt("My notes", {})
     # Notes appended at end
     assert "My notes" in result
+
+
+# ---------------------------------------------------------------------------
+# build_prompt copilot_mode
+# ---------------------------------------------------------------------------
+
+def test_build_prompt_default_mode_has_no_mode_instructions(monkeypatch):
+    """Default (no mode) leaves {{COPILOT_MODE_INSTRUCTIONS}} replaced with empty string."""
+    import prompt_builder
+    template = "{{TUNING_INSTRUCTIONS}}\n\n{{COPILOT_MODE_INSTRUCTIONS}}\n\n{{MEETING_NOTES}}"
+    monkeypatch.setattr(prompt_builder, "load_prompt_template", lambda: template)
+    result = build_prompt("notes", {})
+    assert "{{COPILOT_MODE_INSTRUCTIONS}}" not in result
+    assert "Analyze the transcript" not in result
+
+
+def test_build_prompt_in_meeting_mode(monkeypatch):
+    import prompt_builder
+    template = "{{TUNING_INSTRUCTIONS}}\n\n{{COPILOT_MODE_INSTRUCTIONS}}\n\n{{MEETING_NOTES}}"
+    monkeypatch.setattr(prompt_builder, "load_prompt_template", lambda: template)
+    result = build_prompt("notes", {}, copilot_mode="in_meeting")
+    assert "transcript" in result.lower()
+    assert "downloadable .yaml" in result.lower()
+
+
+def test_build_prompt_post_recap_mode(monkeypatch):
+    import prompt_builder
+    template = "{{TUNING_INSTRUCTIONS}}\n\n{{COPILOT_MODE_INSTRUCTIONS}}\n\n{{MEETING_NOTES}}"
+    monkeypatch.setattr(prompt_builder, "load_prompt_template", lambda: template)
+    result = build_prompt("notes", {}, copilot_mode="post_recap")
+    assert "meeting recap" in result.lower()
+    assert "downloadable .yaml" in result.lower()
+
+
+def test_build_prompt_in_meeting_mode_replaces_meeting_notes_section(monkeypatch):
+    """In-meeting mode: MEETING NOTES section replaced, not appended."""
+    import prompt_builder
+    template = "{{TUNING_INSTRUCTIONS}}\n\n{{COPILOT_MODE_INSTRUCTIONS}}\n\nMEETING NOTES:\n{{MEETING_NOTES}}"
+    monkeypatch.setattr(prompt_builder, "load_prompt_template", lambda: template)
+    result = build_prompt("", {}, copilot_mode="in_meeting")
+    # The sample instruction should NOT appear — transcript instruction replaces the notes section
+    assert prompt_builder.SAMPLE_INSTRUCTION not in result
+
+
+def test_build_prompt_unknown_mode_treated_as_no_mode(monkeypatch):
+    import prompt_builder
+    template = "{{TUNING_INSTRUCTIONS}}\n\n{{COPILOT_MODE_INSTRUCTIONS}}\n\n{{MEETING_NOTES}}"
+    monkeypatch.setattr(prompt_builder, "load_prompt_template", lambda: template)
+    result = build_prompt("notes", {}, copilot_mode="unknown_xyz")
+    assert "{{COPILOT_MODE_INSTRUCTIONS}}" not in result
+    assert "transcript" not in result.lower()
