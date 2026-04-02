@@ -26,10 +26,8 @@
       <div class="d-flex align-items-center gap-2">
         <label class="small text-muted mb-0">Project:</label>
         {% if projects_cache %}
-          <input type="text" class="form-control form-control-sm project-search"
-                 style="width:90px" placeholder="Filter…" autocomplete="off">
-          <select name="project_key_{{ i }}" class="form-select form-select-sm project-select"
-                  style="width:160px">
+          <select name="project_key_{{ i }}" class="form-select form-select-sm"
+                  style="width:180px">
             <option value="">— default ({{ default_project_key }}) —</option>
             {% set _cur = epic.project_key or default_project_key %}
             {% for p in projects_cache %}
@@ -47,10 +45,8 @@
       <div class="d-flex align-items-center gap-2">
         <label class="small text-muted mb-0">Initiative:</label>
         {% if initiatives_cache %}
-          <input type="text" class="form-control form-control-sm initiative-search"
-                 style="width:90px" placeholder="Filter…" autocomplete="off">
-          <select name="initiative_{{ i }}" class="form-select form-select-sm initiative-select"
-                  style="width:200px">
+          <select name="initiative_{{ i }}" class="form-select form-select-sm"
+                  style="width:220px">
             <option value="">— none —</option>
             {% for ini in initiatives_cache %}
               <option value="{{ ini.key }}"{% if epic.initiative_id == ini.key %} selected{% endif %}>{{ ini.key }} — {{ ini.summary }}</option>
@@ -119,23 +115,3 @@
 </form>
 {% endblock %}
 
-{% block scripts %}
-<script nonce="{{ csp_nonce }}">
-(function () {
-  function initSearchableSelect(searchInput) {
-    searchInput.addEventListener('input', function () {
-      var term = searchInput.value.toLowerCase();
-      var select = searchInput.parentElement.querySelector('select');
-      if (!select) return;
-      Array.prototype.forEach.call(select.options, function (opt) {
-        if (opt.value === '') { opt.style.display = ''; return; }
-        opt.style.display = opt.textContent.toLowerCase().indexOf(term) !== -1 ? '' : 'none';
-      });
-    });
-  }
-
-  document.querySelectorAll('.project-search').forEach(initSearchableSelect);
-  document.querySelectorAll('.initiative-search').forEach(initSearchableSelect);
-})();
-</script>
-{% endblock %}

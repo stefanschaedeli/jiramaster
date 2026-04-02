@@ -92,8 +92,10 @@ Opens at **http://127.0.0.1:5000**. Requires Python 3.
 |------|----------|-----------|
 | `config.json` | Jira URL, email, API token, project key, AC field ID, proxy | No (gitignored) |
 | `.secret_key` | Flask session secret (auto-generated on first run) | No (gitignored) |
-| `assignees.json` | Cached Jira assignable users | No (gitignored) |
-| `labels.json` | Cached Jira labels (top 40 by usage) | No (gitignored) |
+| `cache/assignees.json` | Cached Jira assignable users | No (gitignored) |
+| `cache/labels.json` | Cached Jira labels (top 40 by usage) | No (gitignored) |
+| `cache/projects.json` | Cached Jira projects | No (gitignored) |
+| `cache/initiatives.json` | Cached Jira initiatives | No (gitignored) |
 | `.mcp.json` | MCP server config — GitHub token MUST use `${GITHUB_TOKEN}` | No (gitignored) |
 
 ## Key Architecture Decisions
@@ -102,6 +104,20 @@ Opens at **http://127.0.0.1:5000**. Requires Python 3.
 - `Epic.include` and `Story.include` booleans let users exclude items from upload
 - The `initiative_id` field links epics to a parent Jira initiative/epic
 - TLS inspection proxies are supported via `start.sh` CA cert merging + `REQUESTS_CA_BUNDLE`
+
+## SSE Overlay Pattern for Long-Running Operations
+
+**All Jira API operations that may take more than a second MUST use the SSE overlay pattern** — never submit a form synchronously and block the browser. This includes cache refreshes (assignees, labels, initiatives) and Jira uploads.
+
+The pattern:
+1. **Route**: `POST /x/start-<operation>` creates an `operation_id` via `create_operation()`, spawns a `_run_<operation>` background thread, returns `{"operation_id": op_id}` as JSON
+2. **Background worker**: Creates a `JiraClient` with `event_callback` and `abort_check`, does work, emits `status`/`complete`/`error` events via `emit_event(op_id, {...})`
+3. **SSE stream**: `GET /x/events/<op_id>` served by `stream_events(op_id)` as `text/event-stream`
+4. **Abort**: `POST /x/abort/<op_id>` signals cancellation via `abort_operation(op_id)`
+5. **Frontend**: Form `submit` is intercepted, calls `startOperation()` from `static/overlay.js`, which shows a full-screen overlay with progress bar, API log, and abort button
+6. **On complete**: The overlay shows "Close & Refresh" which calls the `onComplete` callback (usually `location.reload()` or a redirect)
+
+Key files: `operation_events.py` (queue/stream infrastructure), `static/overlay.js` (UI), individual routes for start/events/abort endpoints.
 
 ## Logging Convention
 

@@ -110,13 +110,40 @@
 <div class="d-flex gap-2 mt-4">
   <a href="{{ url_for('edit.index') }}" class="btn btn-outline-secondary">← Back to Edit</a>
   {% if cfg.is_configured() and epic_count > 0 %}
-  <form method="POST" action="{{ url_for('upload.run') }}">
+  <form method="POST" action="{{ url_for('upload.run') }}" id="upload-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button type="submit" class="btn btn-success"
-            onclick="this.disabled=true; this.textContent='Uploading…'; this.form.submit()">
+    <button type="submit" class="btn btn-success">
       Upload to Jira ({{ cfg.project_key }}) →
     </button>
   </form>
   {% endif %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script nonce="{{ csp_nonce }}">
+(function () {
+  var form = document.getElementById('upload-form');
+  if (!form) return;
+  var csrfToken = form.querySelector('input[name="csrf_token"]').value;
+
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    var formData = new FormData(form);
+    startOperation(
+      '{{ url_for("upload.start_upload") }}',
+      formData,
+      'Uploading to Jira…',
+      {
+        csrfToken: csrfToken,
+        eventsUrl: '{{ url_for("upload.upload_events", op_id="") }}',
+        abortUrl: '{{ url_for("upload.abort_upload", op_id="") }}',
+        onComplete: function() {
+          location.href = '{{ url_for("upload.results_page") }}';
+        }
+      }
+    );
+  });
+})();
+</script>
 {% endblock %}
