@@ -1,6 +1,6 @@
 import pytest
 import config as config_module
-from prompt_builder import build_tuning_instructions, build_prompt, SAMPLE_INSTRUCTION
+from prompt_builder import build_tuning_instructions, build_prompt
 
 
 SIMPLE_TEMPLATE = "{{TUNING_INSTRUCTIONS}}\n\nNotes:\n{{MEETING_NOTES}}"
@@ -85,7 +85,7 @@ def test_build_prompt_empty_notes(monkeypatch):
     monkeypatch.setattr(prompt_builder, "load_prompt_template", lambda: SIMPLE_TEMPLATE)
 
     result = build_prompt("", {})
-    assert SAMPLE_INSTRUCTION in result
+    assert "Notes:\n" in result
 
 
 def test_build_prompt_whitespace_notes_treated_as_empty(monkeypatch):
@@ -93,7 +93,7 @@ def test_build_prompt_whitespace_notes_treated_as_empty(monkeypatch):
     monkeypatch.setattr(prompt_builder, "load_prompt_template", lambda: SIMPLE_TEMPLATE)
 
     result = build_prompt("   ", {})
-    assert SAMPLE_INSTRUCTION in result
+    assert "Notes:\n" in result
 
 
 def test_build_prompt_no_tuning_placeholder(monkeypatch):
@@ -173,8 +173,8 @@ def test_build_prompt_in_meeting_mode_replaces_meeting_notes_section(monkeypatch
     template = "{{TUNING_INSTRUCTIONS}}\n\n{{COPILOT_MODE_INSTRUCTIONS}}\n\nMEETING NOTES:\n{{MEETING_NOTES}}"
     monkeypatch.setattr(prompt_builder, "load_prompt_template", lambda: template)
     result = build_prompt("", {}, copilot_mode="in_meeting")
-    # The sample instruction should NOT appear — transcript instruction replaces the notes section
-    assert prompt_builder.SAMPLE_INSTRUCTION not in result
+    # Meeting notes section should be removed entirely
+    assert "MEETING NOTES:" not in result
 
 
 def test_build_prompt_unknown_mode_treated_as_no_mode(monkeypatch):

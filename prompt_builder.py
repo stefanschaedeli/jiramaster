@@ -4,10 +4,6 @@ MEETING_NOTES_PLACEHOLDER = "{{MEETING_NOTES}}"
 TUNING_PLACEHOLDER = "{{TUNING_INSTRUCTIONS}}"
 COPILOT_MODE_PLACEHOLDER = "{{COPILOT_MODE_INSTRUCTIONS}}"
 
-SAMPLE_INSTRUCTION = (
-    "(No meeting notes provided — generate a realistic sample output "
-    "with 2–3 Epics and their Stories.)"
-)
 
 AGGRESSIVENESS_MAP = {
     1: (
@@ -108,11 +104,11 @@ def build_prompt(meeting_notes: str, tuning: dict = None, copilot_mode: str = No
             template = template.replace(MEETING_NOTES_PLACEHOLDER, "")
         return template.rstrip()
 
-    # All other modes: inject meeting notes (or sample)
+    # All other modes: inject meeting notes
     notes_content = meeting_notes.strip() if meeting_notes else ""
-    if not notes_content:
-        notes_content = SAMPLE_INSTRUCTION
 
     if MEETING_NOTES_PLACEHOLDER in template:
         return template.replace(MEETING_NOTES_PLACEHOLDER, notes_content)
-    return template + "\n\n" + notes_content
+    if notes_content:
+        return template + "\n\n" + notes_content
+    return template
