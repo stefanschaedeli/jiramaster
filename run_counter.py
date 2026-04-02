@@ -45,8 +45,8 @@ def increment_and_save() -> int:
             json.dump({"counter": new_value}, f, indent=2)
         log.debug("Counter incremented from %d to %d", current, new_value)
         return new_value
-    except Exception as exc:
-        log.error("Could not save counter to %s: %s", _COUNTER_FILE, exc)
+    except Exception:
+        log.exception("Could not save counter to %s", _COUNTER_FILE)
         raise
 
 

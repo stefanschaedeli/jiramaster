@@ -92,7 +92,7 @@ class JiraClient:
         self._event_callback = event_callback
         self._abort_check = abort_check
 
-        self.labels: List[str] = cfg.labels or []
+        self.labels: List[str] = list(cfg.labels or [])
         if run_label:
             self.labels.append(run_label)
 
