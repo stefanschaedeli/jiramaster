@@ -26,6 +26,7 @@ function fallbackCopy(el) {
     const ok = document.execCommand('copy');
     showCopyFeedback(el.id, ok);
   } catch (e) {
+    console.warn('Copy failed', e);
     showCopyFeedback(el.id, false);
   }
 }
@@ -34,25 +35,23 @@ function showCopyFeedback(elementId, success) {
   const btn = document.querySelector(`button[onclick="copyToClipboard('${elementId}')"]`);
   if (!btn) return;
   const original = btn.textContent;
-  const originalClass = btn.classList.contains('btn-outline-secondary') ? 'btn-outline-secondary' : 'btn-outline-primary';
+  const originalClasses = [...btn.classList];
 
   if (success) {
     btn.textContent = 'Copied!';
     btn.classList.add('btn-success');
-    btn.classList.remove(originalClass);
+    btn.classList.remove('btn-outline-secondary', 'btn-outline-primary');
     setTimeout(() => {
       btn.textContent = original;
-      btn.classList.remove('btn-success');
-      btn.classList.add(originalClass);
+      btn.className = originalClasses.join(' ');
     }, 2000);
   } else {
     btn.textContent = 'Copy failed — use Ctrl+C';
     btn.classList.add('btn-danger');
-    btn.classList.remove(originalClass);
+    btn.classList.remove('btn-outline-secondary', 'btn-outline-primary');
     setTimeout(() => {
       btn.textContent = original;
-      btn.classList.remove('btn-danger');
-      btn.classList.add(originalClass);
+      btn.className = originalClasses.join(' ');
     }, 3000);
   }
 }
