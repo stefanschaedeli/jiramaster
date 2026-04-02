@@ -23,9 +23,11 @@ PROMPT_TEMPLATE_FILE = Path(__file__).parent / "data" / "prompt_template.txt"
 DEFAULT_PROMPT_TEMPLATE = """\
 IMPORTANT: Your entire response must be a single valid YAML document. Do not write any text before or after the YAML. Do not use markdown code fences (no ```). Do not explain anything. Do not add headers, bullet points, or prose. Output ONLY the raw YAML starting with "epics:".
 
-You are a senior product manager. Convert the meeting notes at the end of this prompt into a structured YAML document representing Jira Epics and Stories.
+You are a Jira project manager. Convert the meeting content at the end of this prompt into a structured YAML document representing Jira Epics and Stories. Only create epics for work that justifies structured multi-story tracking in Jira. A single task, a brief follow-up, a vague idea, or something one person can complete in a day is NOT an epic — skip it entirely.
 
 {{TUNING_INSTRUCTIONS}}
+
+{{COPILOT_MODE_INSTRUCTIONS}}
 
 REQUIRED OUTPUT STRUCTURE — follow this exactly:
 epics:
