@@ -97,7 +97,7 @@ def test_increment_and_save_sequential():
     assert rc.increment_and_save() == 3
 
 
-def test_increment_and_save_from_41():
+def test_increment_and_save_from_41(patch_counter_file):
     """Increment from 41 returns 42."""
     # Manually write 41 to the file
     counter_file = rc._COUNTER_FILE
@@ -124,7 +124,7 @@ def test_increment_and_save_creates_cache_dir(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_build_run_label_stefan_mueller():
+def test_build_run_label_stefan_mueller(patch_counter_file):
     """build_run_label with 'stefan.mueller@company.com' and counter 42."""
     # We need to mock the counter to return 42
     # But build_run_label calls increment_and_save, which will increment
@@ -136,7 +136,7 @@ def test_build_run_label_stefan_mueller():
     assert label == "JiraMaster-STM-000042"
 
 
-def test_build_run_label_john_doe():
+def test_build_run_label_john_doe(patch_counter_file):
     """build_run_label with 'john.doe@company.com' and counter 1."""
     counter_file = rc._COUNTER_FILE
     counter_file.parent.mkdir(exist_ok=True)
@@ -145,7 +145,7 @@ def test_build_run_label_john_doe():
     assert label == "JiraMaster-JOD-000001"
 
 
-def test_build_run_label_single_name():
+def test_build_run_label_single_name(patch_counter_file):
     """build_run_label with single-part name 'john@company.com'."""
     counter_file = rc._COUNTER_FILE
     counter_file.parent.mkdir(exist_ok=True)
@@ -154,7 +154,7 @@ def test_build_run_label_single_name():
     assert label == "JiraMaster-JOH-000001"
 
 
-def test_build_run_label_very_short_parts():
+def test_build_run_label_very_short_parts(patch_counter_file):
     """build_run_label with short name segments 'a.b@company.com'."""
     counter_file = rc._COUNTER_FILE
     counter_file.parent.mkdir(exist_ok=True)
@@ -167,7 +167,7 @@ def test_build_run_label_very_short_parts():
     assert label == "JiraMaster-ABX-000001"
 
 
-def test_build_run_label_uppercase():
+def test_build_run_label_uppercase(patch_counter_file):
     """Initials are always uppercase."""
     counter_file = rc._COUNTER_FILE
     counter_file.parent.mkdir(exist_ok=True)
@@ -177,7 +177,7 @@ def test_build_run_label_uppercase():
     assert label == "JiraMaster-ALB-000100"
 
 
-def test_build_run_label_zero_padded_counter():
+def test_build_run_label_zero_padded_counter(patch_counter_file):
     """Counter is zero-padded to 6 digits."""
     counter_file = rc._COUNTER_FILE
     counter_file.parent.mkdir(exist_ok=True)
@@ -187,7 +187,7 @@ def test_build_run_label_zero_padded_counter():
     assert "000001" in label
 
 
-def test_build_run_label_counter_increments():
+def test_build_run_label_counter_increments(patch_counter_file):
     """Each call to build_run_label increments the counter."""
     counter_file = rc._COUNTER_FILE
     counter_file.parent.mkdir(exist_ok=True)
@@ -200,7 +200,7 @@ def test_build_run_label_counter_increments():
     assert "000002" in label2
 
 
-def test_build_run_label_strips_non_alpha():
+def test_build_run_label_strips_non_alpha(patch_counter_file):
     """Non-alphabetic characters are stripped from initials."""
     counter_file = rc._COUNTER_FILE
     counter_file.parent.mkdir(exist_ok=True)
@@ -218,7 +218,7 @@ def test_build_run_label_strips_non_alpha():
     assert "JOP" in label
 
 
-def test_build_run_label_no_at_sign():
+def test_build_run_label_no_at_sign(patch_counter_file):
     """Handle username with no @ sign (fallback to full string)."""
     counter_file = rc._COUNTER_FILE
     counter_file.parent.mkdir(exist_ok=True)
@@ -230,7 +230,7 @@ def test_build_run_label_no_at_sign():
     assert "JUS" in label
 
 
-def test_build_run_label_with_numbers_in_email():
+def test_build_run_label_with_numbers_in_email(patch_counter_file):
     """Email with numbers in the local part."""
     counter_file = rc._COUNTER_FILE
     counter_file.parent.mkdir(exist_ok=True)
