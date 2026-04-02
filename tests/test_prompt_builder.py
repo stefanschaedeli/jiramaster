@@ -140,6 +140,24 @@ def test_build_prompt_in_meeting_mode(monkeypatch):
     assert "downloadable .yaml" in result.lower()
 
 
+def test_build_prompt_in_meeting_mode_removes_meeting_notes_placeholder(monkeypatch):
+    """In-meeting mode: bare {{MEETING_NOTES}} placeholder is removed from output."""
+    import prompt_builder
+    template = "{{TUNING_INSTRUCTIONS}}\n\n{{COPILOT_MODE_INSTRUCTIONS}}\n\n{{MEETING_NOTES}}"
+    monkeypatch.setattr(prompt_builder, "load_prompt_template", lambda: template)
+    result = build_prompt("", {}, copilot_mode="in_meeting")
+    assert prompt_builder.MEETING_NOTES_PLACEHOLDER not in result
+
+
+def test_build_prompt_in_meeting_mode_ignores_passed_notes(monkeypatch):
+    """In-meeting mode: passed meeting_notes content does not appear in output."""
+    import prompt_builder
+    template = "{{TUNING_INSTRUCTIONS}}\n\n{{COPILOT_MODE_INSTRUCTIONS}}\n\nMEETING NOTES:\n{{MEETING_NOTES}}"
+    monkeypatch.setattr(prompt_builder, "load_prompt_template", lambda: template)
+    result = build_prompt("these notes should not appear", {}, copilot_mode="in_meeting")
+    assert "these notes should not appear" not in result
+
+
 def test_build_prompt_post_recap_mode(monkeypatch):
     import prompt_builder
     template = "{{TUNING_INSTRUCTIONS}}\n\n{{COPILOT_MODE_INSTRUCTIONS}}\n\n{{MEETING_NOTES}}"

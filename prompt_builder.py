@@ -100,12 +100,11 @@ def build_prompt(meeting_notes: str, tuning: dict = None, copilot_mode: str = No
 
     # In-meeting mode: Copilot reads the transcript directly — skip the meeting notes section
     if copilot_mode == "in_meeting":
-        if MEETING_NOTES_PLACEHOLDER in template:
-            template = template.replace(
-                "MEETING NOTES:\n" + MEETING_NOTES_PLACEHOLDER,
-                ""
-            )
-            # Fallback: if the "MEETING NOTES:" header wasn't present, just remove the placeholder
+        if "MEETING NOTES:\n" + MEETING_NOTES_PLACEHOLDER in template:
+            # Remove the full section header + placeholder
+            template = template.replace("MEETING NOTES:\n" + MEETING_NOTES_PLACEHOLDER, "")
+        else:
+            # Template has placeholder but no "MEETING NOTES:" header — just remove the placeholder
             template = template.replace(MEETING_NOTES_PLACEHOLDER, "")
         return template.rstrip()
 
