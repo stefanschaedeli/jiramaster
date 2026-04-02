@@ -14,23 +14,31 @@ def test_tuning_defaults():
     result = build_tuning_instructions({})
     assert "2 and 6 Stories" in result
     assert "RULES:" in result
-    # Default aggressiveness is 2
-    assert "significant actions" in result
+    # Default aggressiveness is 2 — Jira-centric Standard
+    assert "committed work items" in result
 
 
 def test_tuning_aggressiveness_1():
     result = build_tuning_instructions({"aggressiveness": 1})
-    assert "ONLY explicit decisions" in result
+    assert "explicitly agreed initiatives" in result
+    assert "NOT an epic" in result
+
+
+def test_tuning_aggressiveness_2():
+    result = build_tuning_instructions({"aggressiveness": 2})
+    assert "committed work items" in result
+    assert "at least 2 stories" in result
 
 
 def test_tuning_aggressiveness_3():
     result = build_tuning_instructions({"aggressiveness": 3})
-    assert "ALL action items" in result
+    assert "every identifiable stream of work" in result
+    assert "single-story epics" in result
 
 
 def test_tuning_invalid_aggressiveness_defaults_to_2():
     result = build_tuning_instructions({"aggressiveness": 99})
-    assert "significant actions" in result
+    assert "committed work items" in result
 
 
 def test_tuning_subtasks():

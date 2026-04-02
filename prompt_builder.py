@@ -9,9 +9,20 @@ SAMPLE_INSTRUCTION = (
 )
 
 AGGRESSIVENESS_MAP = {
-    1: "Extract ONLY explicit decisions, commitments, and major deliverables. Ignore minor tasks, discussion points, and vague mentions.",
-    2: "Extract significant actions and deliverables. Include clear next steps but skip minor discussion items.",
-    3: "Extract ALL action items, tasks, and activities mentioned, even brief or tentative ones.",
+    1: (
+        "Only create epics for explicitly agreed initiatives with clear ownership and "
+        "multi-story scope. A single task, vague idea, or minor follow-up is NOT an epic — skip it."
+    ),
+    2: (
+        "Create epics for committed work items that need structured tracking. "
+        "Each epic must justify at least 2 stories. Skip discussion points, "
+        "parking-lot items, and tasks someone can do in a day."
+    ),
+    3: (
+        "Create epics for every identifiable stream of work, including tentative items. "
+        "Still require that each epic has enough substance for multiple stories — "
+        "don't create single-story epics."
+    ),
 }
 
 DETAIL_LEVEL_MAP = {
