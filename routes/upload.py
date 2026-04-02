@@ -9,6 +9,7 @@ from config import load_config
 from jira_client import JiraClient, OperationAbortedError
 from work_store import load_epics, save_epics, get_session_work_id, WORK_DIR
 from operation_events import create_operation, emit_event, stream_events, abort_operation, is_aborted
+from run_counter import build_run_label
 
 log = logging.getLogger(__name__)
 
@@ -51,7 +52,8 @@ def run():
         return redirect(url_for("settings.index"))
 
     epics = load_epics(work_id)
-    client = JiraClient(cfg, verbose=cfg.verbose_logging)
+    run_label = build_run_label(cfg.username)
+    client = JiraClient(cfg, verbose=cfg.verbose_logging, run_label=run_label)
     results = client.upload_epics(epics)
 
     # Save updated epics (with jira_keys) back
@@ -133,8 +135,9 @@ def _run_upload(cfg, work_id, op_id):
     """Background worker: upload epics to Jira with SSE event emission."""
     try:
         callback = lambda evt: emit_event(op_id, evt)
+        run_label = build_run_label(cfg.username)
         client = JiraClient(cfg, verbose=True, event_callback=callback,
-                            abort_check=lambda: is_aborted(op_id))
+                            abort_check=lambda: is_aborted(op_id), run_label=run_label)
 
         def emit_status(msg):
             emit_event(op_id, {"type": "status", "message": msg})
