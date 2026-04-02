@@ -80,7 +80,8 @@ class OperationAbortedError(Exception):
 class JiraClient:
     def __init__(self, cfg: JiraConfig, verbose: bool = False,
                  event_callback: Optional[Callable[[dict], None]] = None,
-                 abort_check: Optional[Callable[[], bool]] = None):
+                 abort_check: Optional[Callable[[], bool]] = None,
+                 run_label: Optional[str] = None):
         self.base_url = cfg.base_url.rstrip("/")
         self.project_key = cfg.project_key
         self.ac_field_id = cfg.ac_field_id or ""
@@ -92,6 +93,8 @@ class JiraClient:
         self._abort_check = abort_check
 
         self.labels: List[str] = cfg.labels or []
+        if run_label:
+            self.labels.append(run_label)
 
         self.session = requests.Session()
         self.session.auth = HTTPBasicAuth(cfg.username, cfg.api_token)
