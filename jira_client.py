@@ -577,14 +577,26 @@ class JiraClient:
             log.error("fetch_projects exception: %s", exc)
             return [], str(exc)
 
-    def fetch_initiatives(self, emit=None) -> Tuple[List[dict], Optional[str]]:
-        """Fetch all Initiative issues via JQL search (paginated).
+    def fetch_initiatives(self, project_keys=None, statuses=None, emit=None) -> Tuple[List[dict], Optional[str]]:
+        """Fetch Initiative issues via JQL search (paginated).
 
         Uses GET /rest/api/3/search/jql with issuetype = Initiative.
+        Optional filters (combined with AND):
+            project_keys: list of project keys to restrict to
+            statuses: list of status names to restrict to
         Returns (initiatives, error_message). initiatives is a list of
         {key, summary, project_key} dicts.
         """
         try:
+            jql_parts = ["issuetype = Initiative"]
+            if project_keys:
+                keys_csv = ", ".join(f'"{k}"' for k in project_keys)
+                jql_parts.append(f"project IN ({keys_csv})")
+            if statuses:
+                statuses_csv = ", ".join(f'"{s}"' for s in statuses)
+                jql_parts.append(f"status IN ({statuses_csv})")
+            jql = " AND ".join(jql_parts) + " ORDER BY key ASC"
+
             initiatives: List[dict] = []
             start_at = 0
             page_size = 100
@@ -595,7 +607,7 @@ class JiraClient:
                     "GET", self._url("search/jql"),
                     label="fetch_initiatives",
                     params={
-                        "jql": "issuetype = Initiative ORDER BY key ASC",
+                        "jql": jql,
                         "fields": "summary,project",
                         "maxResults": page_size,
                         "startAt": start_at,

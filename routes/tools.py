@@ -569,15 +569,20 @@ def start_refresh_initiatives():
     if not cfg.is_configured():
         return jsonify({"error": "Jira not configured"}), 400
 
+    # Collect multi-select filter values
+    project_keys = [k.strip().upper() for k in request.form.getlist("ini_project_keys") if k.strip()]
+    statuses = [s.strip() for s in request.form.getlist("ini_statuses") if s.strip()]
+
     op_id = create_operation()
+    params = {"project_keys": project_keys or None, "statuses": statuses or None}
     thread = threading.Thread(
-        target=_run_refresh_initiatives, args=(cfg, op_id), daemon=True
+        target=_run_refresh_initiatives, args=(cfg, op_id, params), daemon=True
     )
     thread.start()
     return jsonify({"operation_id": op_id})
 
 
-def _run_refresh_initiatives(cfg, op_id):
+def _run_refresh_initiatives(cfg, op_id, params):
     """Background worker for initiative refresh with event emission."""
     try:
         callback = lambda evt: emit_event(op_id, evt)
@@ -588,7 +593,11 @@ def _run_refresh_initiatives(cfg, op_id):
             emit_event(op_id, {"type": "status", "message": msg})
 
         try:
-            fetched, err = client.fetch_initiatives(emit=emit_status)
+            fetched, err = client.fetch_initiatives(
+                project_keys=params["project_keys"],
+                statuses=params["statuses"],
+                emit=emit_status,
+            )
         except OperationAbortedError:
             emit_event(op_id, {"type": "error", "message": "Operation aborted"})
             return
