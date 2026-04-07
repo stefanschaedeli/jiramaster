@@ -11,6 +11,7 @@ body {
 
 /* Stick the nav brand color to primary blue */
 .navbar-brand {
+  color: #0d6efd !important;
   letter-spacing: -0.5px;
 }
 
